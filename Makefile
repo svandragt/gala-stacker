@@ -3,7 +3,7 @@ PLUGIN_DIR := /usr/lib/x86_64-linux-gnu/gala/plugins
 SCHEMA_DIR := /usr/share/glib-2.0/schemas
 SCHEMA := org.pantheon.desktop.gala.plugins.stacker.gschema.xml
 
-.PHONY: all setup build install uninstall clean
+.PHONY: all setup build install uninstall clean lint format
 
 all: build
 
@@ -23,3 +23,9 @@ uninstall:
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+lint:
+	io.elementary.vala-lint src/*.vala
+
+format:
+	io.elementary.vala-lint -f src/*.vala

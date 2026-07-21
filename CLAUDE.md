@@ -17,11 +17,19 @@ make build      # meson setup + ninja
 make install    # build + sudo ninja install (installs .so + gschema)
 make uninstall  # remove the .so and schema, recompile schemas
 make clean      # rm -rf build
+make lint       # io.elementary.vala-lint src/*.vala
+make format     # io.elementary.vala-lint -f src/*.vala (auto-fixes what it can)
 ```
 
 Requires `libgala-dev` and a Gala source checkout for `libmutter-14.vapi` (Ubuntu's
 Mutter packages don't ship a standalone vapi). Point `gala_vapi_dir` in
 `meson_options.txt` at your checkout if it isn't at the default path.
+
+Linting/formatting uses `io.elementary.vala-lint` (elementary's own Vala linter), configured
+via `vala-lint.json` at the repo root (currently the tool's defaults). It has no separate
+formatter mode — `-f`/`make format` auto-fixes whatever the linter itself flags as
+auto-fixable (spacing, brace style, etc.); it won't wrap long lines. Run `make lint` before
+committing.
 
 **Reloading after a change: log out and back in.** Do not use `systemctl --user kill` or
 `gala --replace` to reload — both are known to trigger an unrelated, pre-existing Mutter
