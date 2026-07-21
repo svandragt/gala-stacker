@@ -1,4 +1,4 @@
-namespace Gala.Plugins.PaperWM {
+namespace Gala.Plugins.Stacker {
     /*
      * Keeps one workspace's normal windows tiled edge-to-edge in a single
      * horizontal row, each window full height. Order is whatever the user
@@ -76,7 +76,7 @@ namespace Gala.Plugins.PaperWM {
             workspace.window_added.connect (add_window);
             workspace.window_removed.connect (remove_window);
 
-            warning ("paperwm: Row#%d construct monitor=%d workspace_index=%d", id, monitor, workspace.index ());
+            warning ("stacker: Row#%d construct monitor=%d workspace_index=%d", id, monitor, workspace.index ());
 
             foreach (unowned var window in workspace.list_windows ()) {
                 add_window (window);
@@ -147,7 +147,7 @@ namespace Gala.Plugins.PaperWM {
 
             track_minimized_state (window);
 
-            warning ("paperwm: Row#%d add_window check title=%s seq=%u row_monitor=%d window.get_monitor=%d tileable=%s workspace_index=%d",
+            warning ("stacker: Row#%d add_window check title=%s seq=%u row_monitor=%d window.get_monitor=%d tileable=%s workspace_index=%d",
                 id, window.get_title (), window.get_stable_sequence (), monitor, window.get_monitor (),
                 is_tileable (window).to_string (), workspace.index ());
 
@@ -155,7 +155,7 @@ namespace Gala.Plugins.PaperWM {
                 return;
             }
 
-            warning ("paperwm: Row#%d add_window ACCEPTED title=%s seq=%u monitor=%d", id, window.get_title (), window.get_stable_sequence (), monitor);
+            warning ("stacker: Row#%d add_window ACCEPTED title=%s seq=%u monitor=%d", id, window.get_title (), window.get_stable_sequence (), monitor);
             append (window);
         }
 
@@ -198,7 +198,7 @@ namespace Gala.Plugins.PaperWM {
             // else would trigger.
             window.notify["maximized-horizontally"].connect (() => queue_retile ());
             window.notify["maximized-vertically"].connect (() => queue_retile ());
-            warning ("paperwm: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
+            warning ("stacker: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();
         }
@@ -217,7 +217,7 @@ namespace Gala.Plugins.PaperWM {
             var area = workspace.get_work_area_for_monitor (monitor);
             var frame = window.get_frame_rect ();
             if (frame.height != area.height) {
-                warning ("paperwm: Row#%d height_mismatch title=%s seq=%u expected_height=%d actual_height=%d y=%d",
+                warning ("stacker: Row#%d height_mismatch title=%s seq=%u expected_height=%d actual_height=%d y=%d",
                     id, window.get_title (), window.get_stable_sequence (), area.height, frame.height, frame.y);
             }
         }
@@ -246,7 +246,7 @@ namespace Gala.Plugins.PaperWM {
             if (window == last_focused) {
                 last_focused = null;
             }
-            warning ("paperwm: Row#%d force_remove_window title=%s seq=%u monitor=%d new_order.length=%u",
+            warning ("stacker: Row#%d force_remove_window title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();
         }
@@ -361,7 +361,7 @@ namespace Gala.Plugins.PaperWM {
 
             var area = workspace.get_work_area_for_monitor (monitor);
             int max_x = area.x + area.width;
-            warning ("paperwm: Row#%d retile monitor=%d workspace_index=%d area=(%d,%d %dx%d) order.length=%u",
+            warning ("stacker: Row#%d retile monitor=%d workspace_index=%d area=(%d,%d %dx%d) order.length=%u",
                 id, monitor, workspace.index (), area.x, area.y, area.width, area.height, order.length ());
 
             int x = area.x;
@@ -403,7 +403,7 @@ namespace Gala.Plugins.PaperWM {
                     window.move_resize_frame (false, target_x, area.y, frame.width, area.height);
                 }
 
-                warning ("paperwm: Row#%d retile monitor=%d title=%s seq=%u x=%d target_x=%d width=%d minimized=%s grabbed=%s maximized=%s",
+                warning ("stacker: Row#%d retile monitor=%d title=%s seq=%u x=%d target_x=%d width=%d minimized=%s grabbed=%s maximized=%s",
                     id, monitor, window.get_title (), window.get_stable_sequence (), x, target_x, frame.width,
                     window.minimized.to_string (), (window == grabbed_window).to_string (), is_maximized.to_string ());
 

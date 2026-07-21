@@ -1,4 +1,4 @@
-project('gala-paperwm', 'vala', 'c', version: '0.1.0')
+project('gala-stacker', 'vala', 'c', version: '0.1.0')
 
 gnome = import('gnome')
 
@@ -27,11 +27,11 @@ add_project_arguments([
 ], language: 'vala')
 
 install_data(
-    'data/org.pantheon.desktop.gala.plugins.paperwm.gschema.xml',
+    'data/org.pantheon.desktop.gala.plugins.stacker.gschema.xml',
     install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
 )
 
-shared_library('gala-paperwm',
+shared_library('gala-stacker',
     files(
         'src/Main.vala',
         'src/Row.vala',

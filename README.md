@@ -1,4 +1,4 @@
-# gala-paperwm
+# gala-stacker
 
 I wanted [PaperWM](https://github.com/paperwm/PaperWM)-style tiling on
 elementaryOS, so this is a horizontal tiling plugin for
@@ -48,7 +48,7 @@ and `io.elementary.desktop.wm.keybindings` before picking something else.
 Rebind these in a terminal with `gsettings`, e.g.:
 
 ```
-gsettings set org.pantheon.desktop.gala.plugins.paperwm focus-left "['<Super>comma']"
+gsettings set org.pantheon.desktop.gala.plugins.stacker focus-left "['<Super>comma']"
 ```
 
 ## Mouse

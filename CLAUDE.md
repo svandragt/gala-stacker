@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`gala-paperwm`: a [PaperWM](https://github.com/paperwm/PaperWM)-inspired horizontal tiling
+`gala-stacker`: a [PaperWM](https://github.com/paperwm/PaperWM)-inspired horizontal tiling
 plugin for Gala (the window manager behind elementaryOS's Pantheon desktop), built against
 the public `libgala-dev` plugin API — not a Gala fork. Windows on a workspace are tiled
 edge-to-edge in a single horizontal row per monitor, full height, keeping their current
@@ -31,12 +31,12 @@ dependency-only static unit; logging out lets it come back up cleanly on its own
 
 There is no automated test suite. This plugin is developed and debugged live against a
 real elementaryOS X11 session — verify changes by installing, reloading, reproducing the
-window-management behavior in question, and reading `journalctl _COMM=gala | grep paperwm`
+window-management behavior in question, and reading `journalctl _COMM=gala | grep stacker`
 for the plugin's `warning()` trace output.
 
 ## Architecture
 
-Three Vala files compiled into one `libgala-paperwm.so`, registered via `register_plugin()`
+Three Vala files compiled into one `libgala-stacker.so`, registered via `register_plugin()`
 at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` load priority).
 
 - **`Main.vala`** — top-level orchestration. Tracks one `Row` per (workspace, monitor) pair

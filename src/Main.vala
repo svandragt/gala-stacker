@@ -1,4 +1,4 @@
-namespace Gala.Plugins.PaperWM {
+namespace Gala.Plugins.Stacker {
     public class Main : Gala.Plugin {
         private Gala.WindowManager? wm = null;
         private GLib.Settings settings;
@@ -29,7 +29,7 @@ namespace Gala.Plugins.PaperWM {
 
         public override void initialize (Gala.WindowManager wm) {
             this.wm = wm;
-            settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.paperwm");
+            settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.stacker");
 
             var display = wm.get_display ();
             var workspace_manager = display.get_workspace_manager ();
@@ -80,14 +80,14 @@ namespace Gala.Plugins.PaperWM {
             for (int monitor = 0; monitor < n_monitors; monitor++) {
                 if (find_row (workspace, monitor) == null) {
                     var geometry = display.get_monitor_geometry (monitor);
-                    warning ("paperwm: track_workspace workspace_index=%d monitor=%d geometry=(%d,%d %dx%d) primary=%d",
+                    warning ("stacker: track_workspace workspace_index=%d monitor=%d geometry=(%d,%d %dx%d) primary=%d",
                         workspace.index (), monitor, geometry.x, geometry.y, geometry.width, geometry.height,
                         display.get_primary_monitor ());
                     var row = new Row (workspace, monitor);
                     row.grabbed_window_churn.connect (on_grabbed_window_churn);
                     rows.append (row);
                 } else {
-                    warning ("paperwm: track_workspace workspace_index=%d monitor=%d row already exists, skipping",
+                    warning ("stacker: track_workspace workspace_index=%d monitor=%d row already exists, skipping",
                         workspace.index (), monitor);
                 }
             }
@@ -432,9 +432,9 @@ namespace Gala.Plugins.PaperWM {
 
 public Gala.PluginInfo register_plugin () {
     return Gala.PluginInfo () {
-        name = "paperwm",
+        name = "stacker",
         author = "Sander van Dragt",
-        plugin_type = typeof (Gala.Plugins.PaperWM.Main),
+        plugin_type = typeof (Gala.Plugins.Stacker.Main),
         provides = Gala.PluginFunction.ADDITION,
         load_priority = Gala.LoadPriority.IMMEDIATE
     };

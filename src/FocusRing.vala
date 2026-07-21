@@ -1,4 +1,4 @@
-namespace Gala.Plugins.PaperWM {
+namespace Gala.Plugins.Stacker {
     /*
      * Draws the focused window's border as a rounded-rect stroke via
      * Gala.CanvasActor (Gala's own Cairo-backed canvas actor — not
