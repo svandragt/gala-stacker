@@ -40,6 +40,13 @@ namespace Gala.Plugins.Stacker {
         private unowned Meta.Window? tracked = null;
         private ulong position_signal = 0;
         private ulong size_signal = 0;
+        // Guards against dereferencing `tracked` after it's destroyed: if
+        // focus doesn't get reassigned before the tracked window is fully
+        // gone, do_focus_window() may not fire in time, leaving `tracked`
+        // dangling until the next focus change tries to disconnect its
+        // (now invalid) signal ids. Untracking directly on unmanaged avoids
+        // relying on that ordering.
+        private ulong unmanaged_signal = 0;
 
         public FocusRing (Gala.WindowManager wm) {
             this.wm = wm;
@@ -66,10 +73,15 @@ namespace Gala.Plugins.Stacker {
             if (tracked != null) {
                 tracked.disconnect (position_signal);
                 tracked.disconnect (size_signal);
+                tracked.disconnect (unmanaged_signal);
                 tracked = null;
             }
 
-            if (window == null || !Utils.get_window_is_normal (window)) {
+            // Shares Row.is_normal_app_window() rather than checking
+            // Utils.get_window_is_normal() alone, so system chrome
+            // (wingpanel/plank/Sidewing) that Row refuses to tile doesn't
+            // pick up a focus-ring border either.
+            if (window == null || !Row.is_normal_app_window (window)) {
                 ring.visible = false;
                 return;
             }
@@ -77,6 +89,7 @@ namespace Gala.Plugins.Stacker {
             tracked = window;
             position_signal = window.position_changed.connect (() => update ());
             size_signal = window.size_changed.connect (() => update ());
+            unmanaged_signal = window.unmanaged.connect (() => track (null));
             ring.visible = true;
             update ();
         }
@@ -95,6 +108,7 @@ namespace Gala.Plugins.Stacker {
             if (tracked != null) {
                 tracked.disconnect (position_signal);
                 tracked.disconnect (size_signal);
+                tracked.disconnect (unmanaged_signal);
             }
 
             ring.destroy ();

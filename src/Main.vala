@@ -26,6 +26,15 @@ namespace Gala.Plugins.Stacker {
         // tracks the dragged window, captured once at grab-begin.
         private int resize_partner_far_x = 0;
         private ulong resize_size_changed_id = 0;
+        // Guards against dereferencing a destroyed window mid-resize (e.g.
+        // the neighbor closes while its edge is being dragged): both hooks
+        // just call end_divider_resize(), which cleanly bails out once the
+        // window it needs is gone (Row.force_remove_window() will already
+        // have dropped a destroyed partner from its row by the time this
+        // fires, so find_owning_row() in end_divider_resize() safely finds
+        // nothing to retile).
+        private ulong resize_window_unmanaged_id = 0;
+        private ulong resize_partner_unmanaged_id = 0;
 
         public override void initialize (Gala.WindowManager wm) {
             this.wm = wm;
@@ -42,6 +51,9 @@ namespace Gala.Plugins.Stacker {
                 if (workspace != null) {
                     track_workspace (workspace);
                 }
+            });
+            workspace_manager.workspace_removed.connect ((index) => {
+                untrack_removed_workspaces (workspace_manager);
             });
 
             display.add_keybinding ("reorder-left", settings, Meta.KeyBindingFlags.NONE, on_reorder_left);
@@ -90,6 +102,38 @@ namespace Gala.Plugins.Stacker {
                     warning ("stacker: track_workspace workspace_index=%d monitor=%d row already exists, skipping",
                         workspace.index (), monitor);
                 }
+            }
+        }
+
+        // Rows are otherwise never torn down, so a Row's dynamically-created
+        // workspace being destroyed by Mutter would leave it (and the strong
+        // ref it holds via Row.workspace) tracked forever. Diffs `rows`
+        // against the manager's own current list rather than trying to
+        // match the removed index directly — workspace indices shift when
+        // one is removed, so the index from the signal can't be mapped back
+        // to a specific workspace reliably.
+        private void untrack_removed_workspaces (Meta.WorkspaceManager workspace_manager) {
+            unowned var live = workspace_manager.get_workspaces ();
+
+            var stale = new GLib.List<weak Row> ();
+            foreach (unowned var row in rows) {
+                if (live.find (row.workspace) == null) {
+                    stale.append (row);
+                }
+            }
+
+            foreach (unowned var row in stale) {
+                if (!row.is_empty ()) {
+                    // Shouldn't happen: Mutter doesn't destroy a workspace
+                    // that still has windows on it. Leave it tracked rather
+                    // than risk tearing down a row whose windows still hold
+                    // live signal connections into it.
+                    warning ("stacker: workspace removed but its row still holds windows, leaving it tracked");
+                    continue;
+                }
+
+                row.teardown ();
+                rows.remove (row);
             }
         }
 
@@ -185,6 +229,8 @@ namespace Gala.Plugins.Stacker {
             resize_partner_far_x = delta > 0 ? partner_frame.x + partner_frame.width : partner_frame.x;
 
             resize_size_changed_id = window.size_changed.connect (on_resize_window_size_changed);
+            resize_window_unmanaged_id = window.unmanaged.connect (() => end_divider_resize ());
+            resize_partner_unmanaged_id = partner.unmanaged.connect (() => end_divider_resize ());
         }
 
         // Mirrors the live drag into the partner: its facing edge tracks
@@ -216,12 +262,21 @@ namespace Gala.Plugins.Stacker {
             if (resize_window != null && resize_size_changed_id != 0) {
                 resize_window.disconnect (resize_size_changed_id);
             }
+            if (resize_window != null && resize_window_unmanaged_id != 0) {
+                resize_window.disconnect (resize_window_unmanaged_id);
+            }
+            if (resize_partner != null && resize_partner_unmanaged_id != 0) {
+                resize_partner.disconnect (resize_partner_unmanaged_id);
+            }
 
             Row.resize_partner = null;
 
             // Final settle: the partner's frame is already correct from the
             // live drag, but a retile re-derives every window's x offset in
             // case rounding left the row's internal bookkeeping slightly off.
+            // If the partner was destroyed mid-resize, Row.append()'s own
+            // unmanaged hook has already dropped it from its row by the
+            // time this runs, so find_owning_row() safely finds nothing.
             if (resize_partner != null) {
                 unowned var row = find_owning_row (resize_partner);
                 if (row != null) {
@@ -234,6 +289,8 @@ namespace Gala.Plugins.Stacker {
             resize_delta = 0;
             resize_partner_far_x = 0;
             resize_size_changed_id = 0;
+            resize_window_unmanaged_id = 0;
+            resize_partner_unmanaged_id = 0;
         }
 
         // Named handler with an explicitly nullable window: the vapi
@@ -313,18 +370,26 @@ namespace Gala.Plugins.Stacker {
             unowned var workspace = window.get_workspace ();
             int monitor = monitor_for_window (window);
 
-            // The window may have been dropped on a different monitor than
-            // the row it was tracked under: move it to the right row first.
+            unowned var target = find_row (workspace, monitor);
+
+            // The window may have been dropped on a different monitor and/or
+            // workspace than the row it was tracked under: move it to the
+            // right row first. Checked across every row, not just ones on
+            // the new workspace — a drag that also changes workspace fires
+            // the old workspace's window_removed while Row.grabbed_window is
+            // still set, which remove_window() deliberately ignores (see
+            // Row.grabbed_window), so the old row never lets go of the
+            // window on its own. Without this, the window stays in
+            // Row.claimed forever and can never be tiled again anywhere.
             // (Deliberately not done on window_entered_monitor, which fires
             // continuously mid-drag as the pointer crosses the boundary —
             // retiling there fought the live drag and caused flicker.)
             foreach (unowned var row in rows) {
-                if (row.workspace == workspace && row.monitor != monitor && row.contains (window)) {
+                if (row != target && row.contains (window)) {
                     row.force_remove_window (window);
                 }
             }
 
-            unowned var target = find_row (workspace, monitor);
             if (target != null) {
                 if (!target.contains (window)) {
                     target.force_add_window (window);

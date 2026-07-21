@@ -61,6 +61,9 @@ namespace Gala.Plugins.Stacker {
         private bool retile_queued = false;
         private bool retiling = false;
 
+        private ulong window_added_id = 0;
+        private ulong window_removed_id = 0;
+
         // Investigation-only identity markers (see id below): logging
         // title alone can't tell two same-titled windows or two Row
         // instances for the same monitor apart.
@@ -73,8 +76,8 @@ namespace Gala.Plugins.Stacker {
 
         construct {
             id = next_id++;
-            workspace.window_added.connect (add_window);
-            workspace.window_removed.connect (remove_window);
+            window_added_id = workspace.window_added.connect (add_window);
+            window_removed_id = workspace.window_removed.connect (remove_window);
 
             warning ("stacker: Row#%d construct monitor=%d workspace_index=%d", id, monitor, workspace.index ());
 
@@ -85,6 +88,28 @@ namespace Gala.Plugins.Stacker {
 
         public bool contains (Meta.Window window) {
             return order.find (window) != null;
+        }
+
+        public bool is_empty () {
+            return order.length () == 0;
+        }
+
+        // Called by Main when this row's workspace has been destroyed by
+        // Mutter (workspace_removed). Rows are otherwise never torn down —
+        // without this, `workspace` (an owned, not weak, property) keeps a
+        // dead workspace alive forever, and `rows`/`claimed` grow without
+        // bound as dynamic workspaces come and go. Only meant to be called
+        // on an empty row; see is_empty().
+        public void teardown () {
+            if (window_added_id != 0) {
+                workspace.disconnect (window_added_id);
+                window_added_id = 0;
+            }
+
+            if (window_removed_id != 0) {
+                workspace.disconnect (window_removed_id);
+                window_removed_id = 0;
+            }
         }
 
         // Called by Main whenever a window belonging to this row receives
@@ -103,8 +128,10 @@ namespace Gala.Plugins.Stacker {
         // there can carry that same flag (it's how they stay put across
         // primary-monitor workspace switches), so using it to mean "system
         // chrome, don't tile" was excluding real windows, not just
-        // Wingpanel/Plank.
-        private bool is_tileable (Meta.Window window) {
+        // Wingpanel/Plank. Shared with FocusRing.track() so the two don't
+        // drift: without this, wingpanel/plank/Sidewing could still pick up
+        // a focus-ring border even though Row refuses to tile them.
+        public static bool is_chrome_window (Meta.Window window) {
             string title = window.get_title ().down ();
             bool is_chrome = title.contains ("wingpanel") || title.contains ("plank");
 
@@ -119,7 +146,16 @@ namespace Gala.Plugins.Stacker {
                 is_chrome = true;
             }
 
-            return Utils.get_window_is_normal (window) && !is_chrome && !window.minimized;
+            return is_chrome;
+        }
+
+        // Shared with FocusRing.track() — see is_chrome_window().
+        public static bool is_normal_app_window (Meta.Window window) {
+            return Utils.get_window_is_normal (window) && !is_chrome_window (window);
+        }
+
+        private bool is_tileable (Meta.Window window) {
+            return is_normal_app_window (window) && !window.minimized;
         }
 
         // See minimize_tracked: hooks notify::minimized once per window so
@@ -200,7 +236,14 @@ namespace Gala.Plugins.Stacker {
 
             order.insert (window, insert_at);
             claimed.append (window);
-            window.unmanaged.connect (() => remove_window (window));
+            // Deliberately force_remove_window(), not remove_window(): the
+            // latter ignores the currently-grabbed window so mid-drag
+            // workspace-membership churn doesn't fight the drag (see
+            // grabbed_window), but unmanaged means the window is actually
+            // gone for good — closing a window while dragging it must still
+            // release it here, or it stays claimed forever with nothing
+            // left to ever remove it.
+            window.unmanaged.connect (() => force_remove_window (window));
             window.size_changed.connect (() => log_height_mismatch (window));
             // A maximized window fills the monitor by design, overlapping
             // the rest of the row — retile() deliberately leaves it alone
@@ -286,6 +329,7 @@ namespace Gala.Plugins.Stacker {
 
             order.remove (window);
             claimed.remove (window);
+            minimize_tracked.remove (window);
             if (window == last_focused) {
                 last_focused = null;
             }
