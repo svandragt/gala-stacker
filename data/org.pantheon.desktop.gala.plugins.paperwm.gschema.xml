@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema path="/org/pantheon/desktop/gala/plugins/paperwm/" id="org.pantheon.desktop.gala.plugins.paperwm">
+    <key type="as" name="reorder-left">
+      <default><![CDATA[['<Super><Shift>bracketleft']]]></default>
+      <summary>Move focused window left in the row</summary>
+    </key>
+    <key type="as" name="reorder-right">
+      <default><![CDATA[['<Super><Shift>bracketright']]]></default>
+      <summary>Move focused window right in the row</summary>
+    </key>
+    <key type="as" name="focus-left">
+      <default><![CDATA[['<Super>bracketleft']]]></default>
+      <summary>Focus the window left in the row</summary>
+    </key>
+    <key type="as" name="focus-right">
+      <default><![CDATA[['<Super>bracketright']]]></default>
+      <summary>Focus the window right in the row</summary>
+    </key>
+    <key type="as" name="cycle-width">
+      <default><![CDATA[['<Super>r']]]></default>
+      <summary>Cycle the focused window's width between 33%, 50%, and 67% of the monitor</summary>
+    </key>
+  </schema>
+</schemalist>
