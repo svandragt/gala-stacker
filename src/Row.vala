@@ -106,7 +106,7 @@ namespace Gala.Plugins.Stacker {
         // Wingpanel/Plank.
         private bool is_tileable (Meta.Window window) {
             string title = window.get_title ().down ();
-            bool is_chrome = title.contains ("wingpanel") || title.contains ("plank");
+            bool is_chrome = title.contains ("wingpanel") || title.contains ("plank") || title.contains ("sidewing");
 
             return Utils.get_window_is_normal (window) && !is_chrome && !window.minimized;
         }
@@ -201,6 +201,27 @@ namespace Gala.Plugins.Stacker {
             warning ("stacker: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();
+            schedule_new_window_settle_retiles ();
+        }
+
+        // Some apps (observed with Firefox and Files/Nautilus) restore their
+        // own last-used position/size shortly after Gala maps the window —
+        // asynchronously, after our one retile() in append() already ran.
+        // That later self-reposition silently wins the race and the window
+        // sits at its old spot until something else (e.g. cycle-width)
+        // forces another retile. Rather than try to detect that specific
+        // signal, just retile a couple more times shortly after add to
+        // catch it landing late; retile() is a no-op move_resize_frame for
+        // any window already in place, so the extra calls are cheap.
+        private void schedule_new_window_settle_retiles () {
+            GLib.Timeout.add (200, () => {
+                queue_retile ();
+                return GLib.Source.REMOVE;
+            });
+            GLib.Timeout.add (800, () => {
+                queue_retile ();
+                return GLib.Source.REMOVE;
+            });
         }
 
         // Diagnostic only (see tasks.md): some windows — observed with a
