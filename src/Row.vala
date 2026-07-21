@@ -106,7 +106,18 @@ namespace Gala.Plugins.Stacker {
         // Wingpanel/Plank.
         private bool is_tileable (Meta.Window window) {
             string title = window.get_title ().down ();
-            bool is_chrome = title.contains ("wingpanel") || title.contains ("plank") || title.contains ("sidewing");
+            bool is_chrome = title.contains ("wingpanel") || title.contains ("plank");
+
+            // Sidewing has more than one window (its main bar, plus a
+            // per-plugin Variables Editor dialog) and only the bar's title
+            // actually contains "sidewing" — the editor's title is just
+            // "Variables — <plugin name>". Match its app ID instead of
+            // title so every one of its windows is excluded, not just the
+            // bar.
+            string? app_id = window.get_gtk_application_id ();
+            if (app_id != null && app_id == "com.vandragt.sidewing") {
+                is_chrome = true;
+            }
 
             return Utils.get_window_is_normal (window) && !is_chrome && !window.minimized;
         }
@@ -198,6 +209,17 @@ namespace Gala.Plugins.Stacker {
             // else would trigger.
             window.notify["maximized-horizontally"].connect (() => queue_retile ());
             window.notify["maximized-vertically"].connect (() => queue_retile ());
+            // Some chrome (observed with sidewing) has no title yet at map
+            // time, so is_tileable()'s title-based check above passes and
+            // the window gets claimed. Once its real title lands, evict it
+            // if it turns out to be chrome after all — retile() never
+            // re-checks is_tileable() itself, it just tiles whatever is
+            // already in order.
+            window.notify["title"].connect (() => {
+                if (!is_tileable (window) && contains (window)) {
+                    force_remove_window (window);
+                }
+            });
             warning ("stacker: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();

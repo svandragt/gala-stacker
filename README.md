@@ -70,11 +70,10 @@ make install
 
 (equivalent to `meson setup build && ninja -C build && sudo ninja -C build install`)
 
-Then reload Gala to pick it up:
-
-- **X11 session**: run `gala --replace &` from a terminal in that session.
-- **Wayland session**: log out and back in (a running Wayland compositor
-  can't be replaced in place).
+Then log out and back in to pick it up. Don't use `gala --replace` or
+`systemctl --user kill` to reload in place — both are known to trigger an
+unrelated, pre-existing Mutter crash (`meta_x11_barriers_free` assertion on
+teardown) that's confusing to debug around if you don't know it's coming.
 
 ## Uninstalling
 
@@ -82,7 +81,7 @@ Then reload Gala to pick it up:
 make uninstall
 ```
 
-Then reload Gala the same way as above.
+Then log out and back in the same as above.
 
 ## Known limitations
 

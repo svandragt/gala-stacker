@@ -3,7 +3,7 @@ PLUGIN_DIR := /usr/lib/x86_64-linux-gnu/gala/plugins
 SCHEMA_DIR := /usr/share/glib-2.0/schemas
 SCHEMA := org.pantheon.desktop.gala.plugins.stacker.gschema.xml
 
-.PHONY: all setup build install uninstall reload clean
+.PHONY: all setup build install uninstall clean
 
 all: build
 
@@ -20,9 +20,6 @@ uninstall:
 	sudo rm -f $(PLUGIN_DIR)/libgala-stacker.so
 	sudo rm -f $(SCHEMA_DIR)/$(SCHEMA)
 	sudo glib-compile-schemas $(SCHEMA_DIR)
-
-reload:
-	systemctl --user kill -s SIGKILL io.elementary.gala@x11.service
 
 clean:
 	rm -rf $(BUILD_DIR)

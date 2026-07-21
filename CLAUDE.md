@@ -61,7 +61,11 @@ at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` lo
   `window_removed`, and lays windows out edge-to-edge left-to-right in `retile()`
   (deferred via `GLib.Idle.add` to avoid reentrant signal recursion). Key invariants
   enforced in `is_tileable()`/`add_window()`: a window must be normal, not minimized, not
-  known system chrome (wingpanel/plank excluded by title — deliberately *not* by
+  known system chrome (wingpanel/plank excluded by title; Sidewing excluded by GTK
+  application ID (`com.vandragt.sidewing`) instead of title, since its main bar is the
+  only one of its windows whose title actually contains "sidewing" — a per-plugin
+  Variables Editor dialog titles itself just "Variables — <plugin name>" and would
+  otherwise slip through — deliberately *not* by
   `is_always_on_all_workspaces()`, since Pantheon's secondary-monitor-is-a-shared-surface
   model means ordinary application windows opened there can carry that same flag), on
   **this row's own workspace** (not just the right monitor — a
@@ -100,7 +104,12 @@ at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` lo
   repositioning a currently-maximized window (`maximized_horizontally`/`maximized_vertically`
   — `is_maximized()` isn't available under `HAS_MUTTER46`), since it's meant to fill the
   monitor; `append()` hooks `notify["maximized-horizontally"/"vertically"]` to retile it back
-  into its slot on unmaximize.
+  into its slot on unmaximize. `append()` also hooks `notify["title"]`: some chrome
+  (observed with Sidewing) has no title yet at map time, so `is_tileable()`'s title check
+  passes and the window gets claimed before its app ID or real title is available; once the
+  title lands, the hook re-runs `is_tileable()` and evicts the window via
+  `force_remove_window()` if it turns out to be chrome after all — `retile()` itself never
+  re-checks `is_tileable()`, it just tiles whatever is already in `order`.
 - **`FocusRing.vala`** — a `Gala.CanvasActor` subclass stroking a rounded-rect border (via
   `Gala.Drawing.Utilities.cairo_rounded_rectangle`, not `Clutter.Canvas`, which the vapi
   excludes as of Mutter 46) tracking the focused window's frame rect via `do_focus_window` +
