@@ -5,6 +5,11 @@ namespace Gala.Plugins.Stacker {
      * has arranged via keyboard reorder or drag-and-drop, not stacking order.
      */
     public class Row : GLib.Object {
+        // Mirrors Main's MIN_DIVIDER_RESIZE_WIDTH: the floor cycle_width()
+        // will shrink the neighbor absorbing the resize down to, same as
+        // the live divider-drag path.
+        private const int MIN_NEIGHBOR_WIDTH = 50;
+
         public Meta.Workspace workspace { get; construct; }
         // Which physical monitor this row tiles onto. A workspace gets one
         // Row per monitor since PaperWM-style tiling is inherently per-screen
@@ -554,7 +559,43 @@ namespace Gala.Plugins.Stacker {
 
             int next = (closest + 1) % fractions.length;
             int new_width = (int) Math.round (area.width * fractions[next]);
-            window.move_resize_frame (false, frame.x, frame.y, new_width, frame.height);
+            int delta = new_width - frame.width;
+
+            // The window's own left edge (frame.x) never moves here, so
+            // growing/shrinking always changes its *right* edge — the
+            // boundary it shares with whichever window follows it in the
+            // row. Mirror that into the neighbor the same way divider-drag
+            // resize does (see Main's begin_divider_resize/
+            // on_resize_window_size_changed): the neighbor's facing (left)
+            // edge tracks the shared boundary, its far (right) edge stays
+            // put, so the two windows' combined width is unchanged and
+            // they never overlap or leave a gap.
+            unowned var next_window = neighbor (window, 1);
+            bool next_is_maximized = next_window != null &&
+                (next_window.maximized_horizontally || next_window.maximized_vertically);
+
+            if (delta != 0 && next_window != null && !next_window.minimized && !next_is_maximized) {
+                var next_frame = next_window.get_frame_rect ();
+
+                // Cap the resize to whatever the neighbor can actually give
+                // up: if shrinking it by the full delta would take it below
+                // the same floor divider-drag enforces, shrink it only down
+                // to that floor and grow this window by that reduced amount
+                // instead — otherwise the two would overlap.
+                int actual_delta = delta;
+                if (next_frame.width - actual_delta < MIN_NEIGHBOR_WIDTH) {
+                    actual_delta = next_frame.width - MIN_NEIGHBOR_WIDTH;
+                }
+
+                if (actual_delta != 0) {
+                    window.move_resize_frame (false, frame.x, frame.y, frame.width + actual_delta, frame.height);
+                    next_window.move_resize_frame (false, next_frame.x + actual_delta, next_frame.y,
+                        next_frame.width - actual_delta, next_frame.height);
+                }
+            } else {
+                window.move_resize_frame (false, frame.x, frame.y, new_width, frame.height);
+            }
+
             queue_retile ();
         }
 
