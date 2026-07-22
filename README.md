@@ -22,8 +22,10 @@ switching (`Super+Left/Right` by default) is untouched. It's only the layout
 - Each monitor gets its own independent row per workspace.
 - A newly opened window lands right after whichever window you last had
   focused in that row, not always at the end.
-- The focused window gets a highlighted border, so you can always tell which
-  window has focus at a glance.
+- The focused window gets a highlighted border, coloured to match your
+  System Settings → Appearance accent colour, so you can always tell which
+  window has focus at a glance – and it updates live if you change the
+  accent colour.
 - Windows dragged onto a different monitor move into that monitor's row.
 - Resizing the edge a window shares with its row-neighbour moves that shared
   boundary like elementary's own snapped-window divider – the neighbour
@@ -37,7 +39,7 @@ switching (`Super+Left/Right` by default) is untouched. It's only the layout
 |---|---|
 | `Super+[` / `Super+]` | Move keyboard focus to the window left/right in the row |
 | `Super+Shift+[` / `Super+Shift+]` | Move the focused window itself left/right in the row |
-| `Super+R` | Cycle the focused window's width between 33%, 50%, and 67% of the monitor |
+| `Super+R` | Cycle the focused window's width between 33%, 50%, and 67% of the monitor, shrinking or growing its row-neighbour to compensate |
 
 Every `Super`+arrow-key combination is already claimed by Pantheon/GNOME
 defaults (workspace switching, move-to-monitor, move-to-workspace, tiling),
@@ -51,9 +53,12 @@ Rebind these in a terminal with `gsettings`, e.g.:
 gsettings set org.pantheon.desktop.gala.plugins.stacker focus-left "['<Super>comma']"
 ```
 
-...or through **System Settings → Tiling**, which has the same keybindings (and the
-exclusion lists below) as plain comma-separated text fields — a `switchboard-plug`
-package (`make install` installs it alongside the plugin itself).
+...or through **System Settings → Tiling** — a `switchboard-plug` package
+(`make install` installs it alongside the plugin itself). Shortcuts get a
+proper capture UI there: click a row, press the combo, done, with support
+for more than one shortcut per action. The exclusion lists below are plain
+comma-separated text fields instead, since they're free-form strings rather
+than key combos.
 
 ## Excluding windows from tiling
 
@@ -115,21 +120,13 @@ Then log out and back in the same as above.
 - Connecting or disconnecting a monitor while Gala is running isn't picked up
   live — restart Gala afterwards to get a row on the new monitor.
 - No animation on retile yet; windows snap into place instantly.
-- No horizontal scrolling/viewport: the row tiles left-to-right in fixed
-  screen coordinates, so once it's wider than the monitor, overflowing
-  windows stack on top of each other at the right edge instead of becoming
-  pannable. I tried a real scrolling viewport twice and reverted both times.
-  First because auto-scrolling to reveal the focused window turned into a
-  feedback loop – moving its geometry made Mutter re-affirm focus, which
-  re-triggered the reveal, which oscillated the scroll position. Second
-  because there's no way to actually hide an out-of-view window: Mutter
-  refuses to place a window far enough outside every monitor's bounds (I
-  confirmed this live – even an external `wmctrl` move request gets silently
-  clamped back near real screen bounds, per an unconditional constraint in
-  Mutter's own placement logic with no bypass), and minimising it instead
-  felt too disruptive, with the dock animation and the involuntary focus
-  loss. A real fix would need a patch to Mutter itself, not just this
-  plugin.
+- No horizontal scrolling/viewport: once a row is wider than the monitor,
+  overflowing windows just stack on top of each other at the right edge
+  instead of becoming pannable. I tried building a real scrolling viewport
+  twice and reverted both times – Mutter has no clean way to actually hide
+  a window that's scrolled out of view, and everything I tried around that
+  either fought the window manager or felt worse than just living with the
+  overflow.
 - This is a young, unofficial plugin, not an elementary/Gala project. If Gala
   crashes after installing it, remove the `.so` from the plugins directory
   and reload Gala to get back to a stock session.
