@@ -16,14 +16,36 @@ namespace Gala.Plugins.Stacker {
         // approximation matching the common Granite/GTK default, not a
         // per-window-accurate value.
         private const int RADIUS = 6;
-        private const Clutter.Color COLOR = { 0x64, 0xba, 0xff, 0xff };
+        // Fallback used only until FocusRing has a chance to apply the real
+        // accent color from Granite.Settings (or if Granite ever reports
+        // none). Kept as the pre-existing blue so there's never a moment
+        // with no color set at all.
+        private Clutter.Color color = { 0x64, 0xba, 0xff, 0xff };
+
+        public void set_color (Gdk.RGBA rgba) {
+            color = {
+                (uint8) Math.round (rgba.red * 255),
+                (uint8) Math.round (rgba.green * 255),
+                (uint8) Math.round (rgba.blue * 255),
+                (uint8) Math.round (rgba.alpha * 255),
+            };
+
+            // CanvasActor's content is a cached Cogl texture (see Gala's
+            // Drawing.Canvas): queue_redraw() alone just repaints that
+            // existing texture, it doesn't re-run draw() to regenerate it.
+            // Only Clutter.Content.invalidate() does — set_size() gets this
+            // for free on the next resize, but a color change with no size
+            // change needs it forced here or the ring keeps showing the old
+            // color until something else happens to resize/reallocate it.
+            content.invalidate ();
+        }
 
         protected override void draw (Cairo.Context cr, int width, int height) {
             cr.set_operator (Cairo.Operator.CLEAR);
             cr.paint ();
             cr.set_operator (Cairo.Operator.OVER);
 
-            cr.set_source_rgba (COLOR.red / 255.0, COLOR.green / 255.0, COLOR.blue / 255.0, COLOR.alpha / 255.0);
+            cr.set_source_rgba (color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0);
             cr.set_line_width (THICKNESS);
             Gala.Drawing.Utilities.cairo_rounded_rectangle (cr,
                 THICKNESS / 2.0, THICKNESS / 2.0,
@@ -55,6 +77,17 @@ namespace Gala.Plugins.Stacker {
             ring.visible = false;
 
             wm.ui_group.add_child (ring);
+
+            // Track System Settings > Appearance's accent color live: Granite
+            // already surfaces it as a plain GObject property (backed by
+            // AccountsService under the hood), so a notify handler is all
+            // that's needed to pick up a change the moment the user makes it
+            // — no polling or gsettings-key wiring of our own.
+            var granite_settings = Granite.Settings.get_default ();
+            ring.set_color (granite_settings.accent_color);
+            granite_settings.notify["accent-color"].connect (() => {
+                ring.set_color (granite_settings.accent_color);
+            });
 
             var display = wm.get_display ();
             display.do_focus_window.connect (on_focus_window);
