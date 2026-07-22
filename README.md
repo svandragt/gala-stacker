@@ -51,6 +51,31 @@ Rebind these in a terminal with `gsettings`, e.g.:
 gsettings set org.pantheon.desktop.gala.plugins.stacker focus-left "['<Super>comma']"
 ```
 
+...or through **System Settings → Tiling**, which has the same keybindings (and the
+exclusion lists below) as plain comma-separated text fields — a `switchboard-plug`
+package (`make install` installs it alongside the plugin itself).
+
+## Excluding windows from tiling
+
+Panels, docks, and similar chrome are excluded from the row rather than being tiled at
+full monitor width. Wingpanel and Plank are excluded by default, matched by a substring
+in their window title; anything else can be added the same way, or by GTK application ID
+if the app has more than one window and only some of them should be excluded — either via
+System Settings → Tiling, or with `gsettings`:
+
+```
+gsettings set org.pantheon.desktop.gala.plugins.stacker excluded-title-keywords "['wingpanel', 'plank', 'some-substring']"
+gsettings set org.pantheon.desktop.gala.plugins.stacker excluded-app-ids "['com.vandragt.sidewing', 'some.other.app']"
+```
+
+Small popups and confirmation dialogs (auth prompts, save-changes dialogs) are also left
+alone rather than tiled, based on a minimum width/height in pixels (default 150,
+`min-tileable-size`):
+
+```
+gsettings set org.pantheon.desktop.gala.plugins.stacker min-tileable-size 200
+```
+
 ## Mouse
 
 Drag a window and drop it between two others in the row to reorder it there.

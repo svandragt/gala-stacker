@@ -58,7 +58,20 @@ namespace Gala.Plugins.Stacker {
 
             var display = wm.get_display ();
             display.do_focus_window.connect (on_focus_window);
-            track (display.get_focus_window ());
+
+            // Deliberately not calling track() eagerly here with whatever
+            // window already has focus: `ring` was just add_child()'d this
+            // same tick, and calling its position/size setters before
+            // Clutter considers the actor realized logged a reproducible
+            // `clutter_actor_get_width/height: assertion 'CLUTTER_IS_ACTOR
+            // (self)' failed` on every single Gala start — and deferring
+            // via a single GLib.Idle.add() wasn't a long enough wait to
+            // fix it either. Mutter/Gala always assigns (or explicitly
+            // clears) focus once during its own startup, so do_focus_window
+            // fires on its own moments later regardless — by then `ring`
+            // has had a full frame cycle to become valid, and the ring
+            // simply appears a beat later than at eager-track, which
+            // isn't perceptible.
         }
 
         // Named handler with an explicitly nullable window: the vapi

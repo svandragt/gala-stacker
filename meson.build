@@ -43,4 +43,19 @@ shared_library('gala-stacker',
     install_rpath: mutter_typelib_dir,
 )
 
+# Switchboard settings plug: a GUI over the same gsettings keys the plugin
+# itself reads (keybindings + window-exclusion lists), nothing more.
+switchboard_dep = dependency('switchboard-3')
+switchboard_plugs_dir = switchboard_dep.get_variable(pkgconfig: 'plugsdir')
+
+shared_module('stacker-settings',
+    files(
+        'switchboard-plug/Plug.vala',
+        'switchboard-plug/SettingsView.vala',
+    ),
+    dependencies: [switchboard_dep, dependency('granite-7'), dependency('gtk4'), dependency('gee-0.8')],
+    install: true,
+    install_dir: switchboard_plugs_dir / 'personal',
+)
+
 gnome.post_install(glib_compile_schemas: true)

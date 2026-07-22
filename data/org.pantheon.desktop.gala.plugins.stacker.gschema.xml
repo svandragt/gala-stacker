@@ -21,5 +21,20 @@
       <default><![CDATA[['<Super>r']]]></default>
       <summary>Cycle the focused window's width between 33%, 50%, and 67% of the monitor</summary>
     </key>
+    <key type="as" name="excluded-app-ids">
+      <default><![CDATA[['com.vandragt.sidewing']]]></default>
+      <summary>GTK application IDs to never tile</summary>
+      <description>Windows whose GTK application ID matches one of these are treated as system chrome (like a panel or dock) and left out of the row entirely, regardless of window type.</description>
+    </key>
+    <key type="as" name="excluded-title-keywords">
+      <default><![CDATA[['wingpanel', 'plank']]]></default>
+      <summary>Window title substrings to never tile</summary>
+      <description>Windows whose title contains one of these substrings (case-insensitive) are treated as system chrome and left out of the row entirely.</description>
+    </key>
+    <key type="i" name="min-tileable-size">
+      <default>150</default>
+      <summary>Minimum window width/height (px) to be tiled</summary>
+      <description>Windows narrower or shorter than this, in pixels, are left alone instead of tiled — catches small popups/confirmation dialogs that shouldn't be forced into the row.</description>
+    </key>
   </schema>
 </schemalist>

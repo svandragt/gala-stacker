@@ -63,6 +63,9 @@ namespace Gala.Plugins.Stacker {
 
         private ulong window_added_id = 0;
         private ulong window_removed_id = 0;
+        private ulong excluded_title_keywords_changed_id = 0;
+        private ulong excluded_app_ids_changed_id = 0;
+        private ulong min_tileable_size_changed_id = 0;
 
         // Investigation-only identity markers (see id below): logging
         // title alone can't tell two same-titled windows or two Row
@@ -79,10 +82,43 @@ namespace Gala.Plugins.Stacker {
             window_added_id = workspace.window_added.connect (add_window);
             window_removed_id = workspace.window_removed.connect (remove_window);
 
+            // Without this, editing excluded-title-keywords/excluded-app-ids
+            // (via `gsettings set` or the Switchboard plug) has no effect on
+            // windows already tiled or already excluded — is_tileable() was
+            // otherwise only ever re-checked on add, or on a window's own
+            // notify::title/notify::minimized, never on the exclusion lists
+            // themselves changing.
+            excluded_title_keywords_changed_id = get_exclusion_settings ()
+                .changed["excluded-title-keywords"].connect (() => reevaluate_exclusions ());
+            excluded_app_ids_changed_id = get_exclusion_settings ()
+                .changed["excluded-app-ids"].connect (() => reevaluate_exclusions ());
+            min_tileable_size_changed_id = get_exclusion_settings ()
+                .changed["min-tileable-size"].connect (() => reevaluate_exclusions ());
+
             warning ("stacker: Row#%d construct monitor=%d workspace_index=%d", id, monitor, workspace.index ());
 
             foreach (unowned var window in workspace.list_windows ()) {
                 add_window (window);
+            }
+        }
+
+        // Re-derives chrome exclusion for every window on this row's own
+        // monitor against the (just-changed) gsettings lists: evicts
+        // anything already tiled that should now be excluded, and offers
+        // anything not yet claimed a chance to be added in case it should
+        // now be tileable. add_window() already no-ops safely on a window
+        // this row doesn't own or that's claimed elsewhere.
+        private void reevaluate_exclusions () {
+            foreach (unowned var window in workspace.list_windows ()) {
+                if (window.get_monitor () != monitor) {
+                    continue;
+                }
+
+                if (contains (window) && !is_tileable (window)) {
+                    force_remove_window (window);
+                } else if (!contains (window)) {
+                    add_window (window);
+                }
             }
         }
 
@@ -110,6 +146,21 @@ namespace Gala.Plugins.Stacker {
                 workspace.disconnect (window_removed_id);
                 window_removed_id = 0;
             }
+
+            if (excluded_title_keywords_changed_id != 0) {
+                get_exclusion_settings ().disconnect (excluded_title_keywords_changed_id);
+                excluded_title_keywords_changed_id = 0;
+            }
+
+            if (excluded_app_ids_changed_id != 0) {
+                get_exclusion_settings ().disconnect (excluded_app_ids_changed_id);
+                excluded_app_ids_changed_id = 0;
+            }
+
+            if (min_tileable_size_changed_id != 0) {
+                get_exclusion_settings ().disconnect (min_tileable_size_changed_id);
+                min_tileable_size_changed_id = 0;
+            }
         }
 
         // Called by Main whenever a window belonging to this row receives
@@ -117,6 +168,21 @@ namespace Gala.Plugins.Stacker {
         // currently is.
         public void note_focus (Meta.Window window) {
             last_focused = window;
+        }
+
+        // Backing store for excluded-app-ids/excluded-title-keywords (see
+        // gschema). Lazily created rather than at field-init time: Row
+        // instances (and FocusRing, via is_normal_app_window()) can be
+        // constructed before GLib.Settings' schema source is guaranteed
+        // ready, so the first real call is a safer place to open it.
+        private static GLib.Settings? exclusion_settings = null;
+
+        private static GLib.Settings get_exclusion_settings () {
+            if (exclusion_settings == null) {
+                exclusion_settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.stacker");
+            }
+
+            return exclusion_settings;
         }
 
         // Utils.get_window_is_normal() alone isn't enough: Wingpanel reports
@@ -129,24 +195,42 @@ namespace Gala.Plugins.Stacker {
         // primary-monitor workspace switches), so using it to mean "system
         // chrome, don't tile" was excluding real windows, not just
         // Wingpanel/Plank. Shared with FocusRing.track() so the two don't
-        // drift: without this, wingpanel/plank/Sidewing could still pick up
-        // a focus-ring border even though Row refuses to tile them.
+        // drift: without this, an excluded window could still pick up a
+        // focus-ring border even though Row refuses to tile it.
+        //
+        // Both lists come from gsettings (excluded-title-keywords,
+        // excluded-app-ids) rather than being hardcoded, so excluding a
+        // different panel/dock/plugin doesn't need a source change and
+        // rebuild — see `gsettings set
+        // org.pantheon.desktop.gala.plugins.stacker excluded-app-ids
+        // "['some.app.id']"`.
         public static bool is_chrome_window (Meta.Window window) {
-            string title = window.get_title ().down ();
-            bool is_chrome = title.contains ("wingpanel") || title.contains ("plank");
+            var settings = get_exclusion_settings ();
 
-            // Sidewing has more than one window (its main bar, plus a
-            // per-plugin Variables Editor dialog) and only the bar's title
-            // actually contains "sidewing" — the editor's title is just
-            // "Variables — <plugin name>". Match its app ID instead of
-            // title so every one of its windows is excluded, not just the
-            // bar.
-            string? app_id = window.get_gtk_application_id ();
-            if (app_id != null && app_id == "com.vandragt.sidewing") {
-                is_chrome = true;
+            string title = window.get_title ().down ();
+            foreach (unowned string keyword in settings.get_strv ("excluded-title-keywords")) {
+                if (keyword != "" && title.contains (keyword.down ())) {
+                    return true;
+                }
             }
 
-            return is_chrome;
+            // Sidewing (the default excluded-app-ids entry) has more than
+            // one window (its main bar, plus a per-plugin Variables Editor
+            // dialog) and only the bar's title actually contains
+            // "sidewing" — the editor's title is just "Variables — <plugin
+            // name>". Matching by app ID instead of title excludes every
+            // one of an app's windows, not just whichever one happens to
+            // have a matching title.
+            string? app_id = window.get_gtk_application_id ();
+            if (app_id != null) {
+                foreach (unowned string excluded_id in settings.get_strv ("excluded-app-ids")) {
+                    if (app_id == excluded_id) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         // Shared with FocusRing.track() — see is_chrome_window().
@@ -154,8 +238,20 @@ namespace Gala.Plugins.Stacker {
             return Utils.get_window_is_normal (window) && !is_chrome_window (window);
         }
 
+        // Small popups/confirmation dialogs (e.g. an auth prompt or a
+        // save-changes confirmation) report as normal windows but shouldn't
+        // be forced edge-to-edge into the row — min-tileable-size (gschema,
+        // default 150px) is a floor on both dimensions, not just one, since
+        // a narrow-but-tall or wide-but-short window is just as much a
+        // popup as a small square one.
         private bool is_tileable (Meta.Window window) {
-            return is_normal_app_window (window) && !window.minimized;
+            if (!is_normal_app_window (window) || window.minimized) {
+                return false;
+            }
+
+            var frame = window.get_frame_rect ();
+            int min_size = get_exclusion_settings ().get_int ("min-tileable-size");
+            return frame.width >= min_size && frame.height >= min_size;
         }
 
         // See minimize_tracked: hooks notify::minimized once per window so

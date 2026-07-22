@@ -14,12 +14,18 @@ width. It does not touch Pantheon's workspace switching, only in-workspace layou
 
 ```
 make build      # meson setup + ninja
-make install    # build + sudo ninja install (installs .so + gschema)
-make uninstall  # remove the .so and schema, recompile schemas
+make install    # build + sudo ninja install (installs both .so's + gschema)
+make uninstall  # remove both .so's and the schema, recompile schemas
 make clean      # rm -rf build
-make lint       # io.elementary.vala-lint src/*.vala
-make format     # io.elementary.vala-lint -f src/*.vala (auto-fixes what it can)
+make lint       # io.elementary.vala-lint src/*.vala switchboard-plug/*.vala
+make format     # io.elementary.vala-lint -f ... (auto-fixes what it can)
 ```
+
+`meson.build` produces two shared objects from one project: `libgala-stacker.so` (the Gala
+plugin itself, `src/*.vala`) and `libstacker-settings.so` (a Switchboard settings plug,
+`switchboard-plug/*.vala`, installed to Switchboard's `personal` category) — see "Settings"
+below. Both need `make install` and a log out/in (or, for the Switchboard plug alone,
+just restarting Switchboard) to pick up.
 
 Requires `libgala-dev` and a Gala source checkout for `libmutter-14.vapi` (Ubuntu's
 Mutter packages don't ship a standalone vapi). Point `gala_vapi_dir` in
@@ -69,11 +75,16 @@ at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` lo
   `window_removed`, and lays windows out edge-to-edge left-to-right in `retile()`
   (deferred via `GLib.Idle.add` to avoid reentrant signal recursion). Key invariants
   enforced in `is_tileable()`/`add_window()`: a window must be normal, not minimized, not
-  known system chrome (wingpanel/plank excluded by title; Sidewing excluded by GTK
+  known system chrome — configurable via the `excluded-title-keywords`/`excluded-app-ids`
+  gschema keys (defaults: wingpanel/plank excluded by title; Sidewing excluded by GTK
   application ID (`com.vandragt.sidewing`) instead of title, since its main bar is the
   only one of its windows whose title actually contains "sidewing" — a per-plugin
   Variables Editor dialog titles itself just "Variables — <plugin name>" and would
-  otherwise slip through — deliberately *not* by
+  otherwise slip through). Both gschema keys are re-read live: each `Row` hooks
+  `GLib.Settings.changed` for both and re-evaluates every window on its own monitor
+  (`reevaluate_exclusions()`) so editing the exclusion lists — via `gsettings set` or the
+  Switchboard plug — takes effect on already-open windows immediately, not just newly
+  opened ones. Deliberately *not* by
   `is_always_on_all_workspaces()`, since Pantheon's secondary-monitor-is-a-shared-surface
   model means ordinary application windows opened there can carry that same flag), on
   **this row's own workspace** (not just the right monitor — a
@@ -129,6 +140,30 @@ Recurring Vala/vapi gotcha throughout: several Mutter signal vapis declare `Meta
 parameters non-nullable when Mutter actually passes null (e.g. focus cleared, grab ended
 with no window) — always use a named handler with an explicit `Meta.Window?` parameter,
 never an inline lambda, or Vala's auto-inserted null assertion crashes Gala.
+
+## Settings
+
+`switchboard-plug/` is a separate build target (`libstacker-settings.so`) from the Gala
+plugin — a Switchboard plug, not part of `libgala-stacker.so`, installed into Switchboard's
+`personal` category. It has no logic of its own: it's a GTK4 view over the same
+`org.pantheon.desktop.gala.plugins.stacker` gschema the plugin itself reads, using
+`GLib.Settings.bind_with_mapping()` to show/edit each `as` (string array) key as a single
+comma-separated `Gtk.Entry` — one binding function pair (`strv_to_text`/`text_to_strv` in
+`SettingsView.vala`) covers every row, keybindings and exclusion lists alike, since they're
+all the same gschema type. The mapping delegates use GSettings' plain-C-function-pointer
+form (`SettingsBindGetMappingShared`/`...SetMappingShared`, `has_target = false` in the
+vapi) rather than closures, since that's the only overload the vapi exposes — hence they're
+`static` methods taking an unused `void* user_data`, not instance methods or lambdas.
+
+The plug's entry point is a top-level `get_plug (GLib.Module module)` function (not a class
+member) — this is Switchboard's actual loader contract: it `dlopen`s the `.so` and looks up
+that exact symbol name, established empirically from `nm -D` on an installed system plug
+(`io.elementary.settings.mouse-touchpad`) since the C header doesn't declare it. No
+Switchboard shell binary is installed in this dev environment to click through by hand —
+verified instead with a standalone C harness that `dlopen`s the built `.so`, calls
+`get_plug`/`get_widget()` directly, and round-trips a value through the binding both ways
+(gsettings write → entry text updates; typing in the entry → gsettings updates) against a
+temporary `GSETTINGS_SCHEMA_DIR`, without touching the real installed schema.
 
 ## Known limitations
 
