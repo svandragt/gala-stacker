@@ -561,21 +561,27 @@ namespace Gala.Plugins.Stacker {
             int new_width = (int) Math.round (area.width * fractions[next]);
             int delta = new_width - frame.width;
 
-            // The window's own left edge (frame.x) never moves here, so
-            // growing/shrinking always changes its *right* edge — the
-            // boundary it shares with whichever window follows it in the
-            // row. Mirror that into the neighbor the same way divider-drag
+            // Mirror the resize into a neighbor the same way divider-drag
             // resize does (see Main's begin_divider_resize/
-            // on_resize_window_size_changed): the neighbor's facing (left)
-            // edge tracks the shared boundary, its far (right) edge stays
-            // put, so the two windows' combined width is unchanged and
-            // they never overlap or leave a gap.
-            unowned var next_window = neighbor (window, 1);
-            bool next_is_maximized = next_window != null &&
-                (next_window.maximized_horizontally || next_window.maximized_vertically);
+            // on_resize_window_size_changed): the neighbor's facing edge
+            // tracks the shared boundary, its far edge stays put, so the
+            // two windows' combined width is unchanged and they never
+            // overlap or leave a gap. Prefer the right neighbor (grow this
+            // window's right edge into it, keeping this window's own left
+            // edge fixed); if there isn't a usable one — this is the last
+            // window in the row — fall back to the left neighbor instead
+            // (grow this window's left edge into it), since otherwise the
+            // last window in a row would just overflow off the monitor
+            // with nothing compensating at all.
+            unowned var right = neighbor (window, 1);
+            unowned var left = neighbor (window, -1);
+            bool right_usable = right != null && !right.minimized &&
+                !right.maximized_horizontally && !right.maximized_vertically;
+            bool left_usable = left != null && !left.minimized &&
+                !left.maximized_horizontally && !left.maximized_vertically;
 
-            if (delta != 0 && next_window != null && !next_window.minimized && !next_is_maximized) {
-                var next_frame = next_window.get_frame_rect ();
+            if (delta != 0 && right_usable) {
+                var right_frame = right.get_frame_rect ();
 
                 // Cap the resize to whatever the neighbor can actually give
                 // up: if shrinking it by the full delta would take it below
@@ -583,14 +589,28 @@ namespace Gala.Plugins.Stacker {
                 // to that floor and grow this window by that reduced amount
                 // instead — otherwise the two would overlap.
                 int actual_delta = delta;
-                if (next_frame.width - actual_delta < MIN_NEIGHBOR_WIDTH) {
-                    actual_delta = next_frame.width - MIN_NEIGHBOR_WIDTH;
+                if (right_frame.width - actual_delta < MIN_NEIGHBOR_WIDTH) {
+                    actual_delta = right_frame.width - MIN_NEIGHBOR_WIDTH;
                 }
 
                 if (actual_delta != 0) {
                     window.move_resize_frame (false, frame.x, frame.y, frame.width + actual_delta, frame.height);
-                    next_window.move_resize_frame (false, next_frame.x + actual_delta, next_frame.y,
-                        next_frame.width - actual_delta, next_frame.height);
+                    right.move_resize_frame (false, right_frame.x + actual_delta, right_frame.y,
+                        right_frame.width - actual_delta, right_frame.height);
+                }
+            } else if (delta != 0 && left_usable) {
+                var left_frame = left.get_frame_rect ();
+
+                int actual_delta = delta;
+                if (left_frame.width - actual_delta < MIN_NEIGHBOR_WIDTH) {
+                    actual_delta = left_frame.width - MIN_NEIGHBOR_WIDTH;
+                }
+
+                if (actual_delta != 0) {
+                    window.move_resize_frame (false, frame.x - actual_delta, frame.y,
+                        frame.width + actual_delta, frame.height);
+                    left.move_resize_frame (false, left_frame.x, left_frame.y,
+                        left_frame.width - actual_delta, left_frame.height);
                 }
             } else {
                 window.move_resize_frame (false, frame.x, frame.y, new_width, frame.height);
