@@ -58,6 +58,23 @@ namespace Gala.Plugins.Stacker {
         // gets pulled into the row once it's shown, and drops back out the
         // moment it's hidden again — not just checked once at add time.
         private GLib.List<weak Meta.Window> minimize_tracked = new GLib.List<weak Meta.Window> ();
+        // Windows we've already hooked size_changed on so a window rejected
+        // at add time for being below min-tileable-size (a small popup,
+        // e.g.) still joins the row if it's later resized past the
+        // threshold — is_tileable() was otherwise only ever re-checked at
+        // add time, on notify::title, or when the exclusion settings
+        // themselves change (reevaluate_exclusions()), never on the
+        // window's own live size.
+        private GLib.List<weak Meta.Window> size_tracked = new GLib.List<weak Meta.Window> ();
+        // Windows already hooked with append()'s per-window lifecycle
+        // signals (unmanaged, size_changed, maximized/title notifies).
+        // append() itself is called on every re-add of a window that's
+        // left and rejoined the row — e.g. every minimize/restore cycle
+        // via track_minimized_state() — not just the first time it's ever
+        // tiled, so without this guard those hooks would be reconnected
+        // (and pile up, one full set per cycle) each time a long-lived
+        // window like CopyQ is shown again.
+        private GLib.List<weak Meta.Window> lifecycle_tracked = new GLib.List<weak Meta.Window> ();
         private bool retile_queued = false;
         private bool retiling = false;
 
@@ -254,6 +271,22 @@ namespace Gala.Plugins.Stacker {
             return frame.width >= min_size && frame.height >= min_size;
         }
 
+        // See size_tracked: hooks size_changed once per window so a window
+        // currently too small to tile still joins the row later if it grows
+        // past min-tileable-size.
+        private void track_size_state (Meta.Window window) {
+            if (size_tracked.find (window) != null) {
+                return;
+            }
+
+            size_tracked.append (window);
+            window.size_changed.connect (() => {
+                if (!contains (window) && window.get_monitor () == monitor && window.get_workspace () == workspace) {
+                    add_window (window);
+                }
+            });
+        }
+
         // See minimize_tracked: hooks notify::minimized once per window so
         // a currently-minimized (but otherwise tileable) window still joins
         // the row later if it's ever shown, and drops out again the moment
@@ -289,6 +322,7 @@ namespace Gala.Plugins.Stacker {
             }
 
             track_minimized_state (window);
+            track_size_state (window);
 
             warning ("stacker: Row#%d add_window check title=%s seq=%u row_monitor=%d window.get_monitor=%d tileable=%s workspace_index=%d",
                 id, window.get_title (), window.get_stable_sequence (), monitor, window.get_monitor (),
@@ -332,33 +366,54 @@ namespace Gala.Plugins.Stacker {
 
             order.insert (window, insert_at);
             claimed.append (window);
-            // Deliberately force_remove_window(), not remove_window(): the
-            // latter ignores the currently-grabbed window so mid-drag
-            // workspace-membership churn doesn't fight the drag (see
-            // grabbed_window), but unmanaged means the window is actually
-            // gone for good — closing a window while dragging it must still
-            // release it here, or it stays claimed forever with nothing
-            // left to ever remove it.
-            window.unmanaged.connect (() => force_remove_window (window));
-            window.size_changed.connect (() => log_height_mismatch (window));
-            // A maximized window fills the monitor by design, overlapping
-            // the rest of the row — retile() deliberately leaves it alone
-            // while that's the case (see retile()). Once it's unmaximized
-            // again it needs to snap back into its row slot, which nothing
-            // else would trigger.
-            window.notify["maximized-horizontally"].connect (() => queue_retile ());
-            window.notify["maximized-vertically"].connect (() => queue_retile ());
-            // Some chrome (observed with sidewing) has no title yet at map
-            // time, so is_tileable()'s title-based check above passes and
-            // the window gets claimed. Once its real title lands, evict it
-            // if it turns out to be chrome after all — retile() never
-            // re-checks is_tileable() itself, it just tiles whatever is
-            // already in order.
-            window.notify["title"].connect (() => {
-                if (!is_tileable (window) && contains (window)) {
+
+            // Guard: append() runs again on every re-add of a window that's
+            // left and rejoined this row (e.g. a minimize/restore cycle via
+            // track_minimized_state()), not just the first time it's ever
+            // tiled. Only wire these up once per window's lifetime, or a
+            // long-lived window like CopyQ (which the min/restore comments
+            // above already call out) accumulates a full duplicate set of
+            // handlers every cycle.
+            if (lifecycle_tracked.find (window) == null) {
+                lifecycle_tracked.append (window);
+
+                // Deliberately force_remove_window(), not remove_window():
+                // the latter ignores the currently-grabbed window so
+                // mid-drag workspace-membership churn doesn't fight the
+                // drag (see grabbed_window), but unmanaged means the window
+                // is actually gone for good — closing a window while
+                // dragging it must still release it here, or it stays
+                // claimed forever with nothing left to ever remove it.
+                // Also drops it from lifecycle_tracked here specifically
+                // (not in force_remove_window() itself, which also runs for
+                // a plain minimize or a cross-monitor drag re-home, neither
+                // of which destroys the window): this is the one path where
+                // the window is actually gone for good, so it's the only
+                // place this list should be pruned.
+                window.unmanaged.connect (() => {
+                    lifecycle_tracked.remove (window);
                     force_remove_window (window);
-                }
-            });
+                });
+                window.size_changed.connect (() => correct_height_mismatch (window));
+                // A maximized window fills the monitor by design, overlapping
+                // the rest of the row — retile() deliberately leaves it alone
+                // while that's the case (see retile()). Once it's unmaximized
+                // again it needs to snap back into its row slot, which nothing
+                // else would trigger.
+                window.notify["maximized-horizontally"].connect (() => queue_retile ());
+                window.notify["maximized-vertically"].connect (() => queue_retile ());
+                // Some chrome (observed with sidewing) has no title yet at map
+                // time, so is_tileable()'s title-based check above passes and
+                // the window gets claimed. Once its real title lands, evict it
+                // if it turns out to be chrome after all — retile() never
+                // re-checks is_tileable() itself, it just tiles whatever is
+                // already in order.
+                window.notify["title"].connect (() => {
+                    if (!is_tileable (window) && contains (window)) {
+                        force_remove_window (window);
+                    }
+                });
+            }
             warning ("stacker: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();
@@ -385,13 +440,16 @@ namespace Gala.Plugins.Stacker {
             });
         }
 
-        // Diagnostic only (see tasks.md): some windows — observed with a
-        // Firefox web-app window loading Gmail — don't end up full row
-        // height right when they open, though dragging them slightly fixes
-        // it. Not fixed yet; this traces actual vs. expected height on
-        // every size change so a future session has real data to work from
-        // instead of guessing.
-        private void log_height_mismatch (Meta.Window window) {
+        // Some windows — observed with a Firefox web-app window loading
+        // Gmail — self-resize away from full row height sometime after
+        // append()'s own settle retiles (schedule_new_window_settle_retiles)
+        // have already run, e.g. once the page itself finishes loading.
+        // Nothing else reacts to a window's own late size_changed, so
+        // without this the window would be stuck short until some
+        // unrelated retile (e.g. cycle-width) happened to fix it.
+        // queue_retile() is cheap here since retile() no-ops a
+        // move_resize_frame for any window already in place.
+        private void correct_height_mismatch (Meta.Window window) {
             if (!contains (window)) {
                 return;
             }
@@ -401,6 +459,7 @@ namespace Gala.Plugins.Stacker {
             if (frame.height != area.height) {
                 warning ("stacker: Row#%d height_mismatch title=%s seq=%u expected_height=%d actual_height=%d y=%d",
                     id, window.get_title (), window.get_stable_sequence (), area.height, frame.height, frame.y);
+                queue_retile ();
             }
         }
 
@@ -426,6 +485,7 @@ namespace Gala.Plugins.Stacker {
             order.remove (window);
             claimed.remove (window);
             minimize_tracked.remove (window);
+            size_tracked.remove (window);
             if (window == last_focused) {
                 last_focused = null;
             }
