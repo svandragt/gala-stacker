@@ -21,6 +21,15 @@ void test_next_fraction_width_picks_closest_when_between_steps () {
     assert (Geometry.next_fraction_width (340, 900, fractions) == 450);
 }
 
+void test_next_fraction_width_breaks_exact_ties_toward_lower_fraction () {
+    double[] fractions = { 1.0 / 3.0, 1.0 / 2.0, 2.0 / 3.0 };
+
+    // 375px is exactly equidistant between 1/3 (300px) and 1/2 (450px) of
+    // a 900px area. The comparison is strict-less-than, so the first
+    // (lower) fraction wins the tie and the cycle still advances from it.
+    assert (Geometry.next_fraction_width (375, 900, fractions) == 450);
+}
+
 void test_cap_delta_to_min_width_passes_through_when_room () {
     // Shrinking a 400px neighbor by 100px leaves it at 300px, well above
     // a 50px floor, so the delta is unchanged.
@@ -31,6 +40,19 @@ void test_cap_delta_to_min_width_caps_when_it_would_go_below_floor () {
     // Shrinking a 120px neighbor by 100px would take it to 20px, below
     // the 50px floor, so the delta is capped to leave it exactly at 50px.
     assert (Geometry.cap_delta_to_min_width (120, 100, 50) == 70);
+}
+
+void test_cap_delta_to_min_width_passes_through_at_exact_floor () {
+    // Landing exactly on the floor (150 - 100 == 50) is not "below" it —
+    // the check is strict-less-than, so this must NOT be capped further.
+    assert (Geometry.cap_delta_to_min_width (150, 100, 50) == 100);
+}
+
+void test_cap_delta_to_min_width_passes_through_when_growing_neighbor () {
+    // A negative delta grows the neighbor (this is the shape cycle_width()
+    // produces when wrapping from a larger fraction back down to a
+    // smaller one) — growing never risks the floor, so it's never capped.
+    assert (Geometry.cap_delta_to_min_width (60, -200, 50) == -200);
 }
 
 void test_resize_delta_for_op_maps_right_edges_to_positive_one () {
@@ -50,6 +72,15 @@ void test_resize_delta_for_op_ignores_non_horizontal_ops () {
     assert (Geometry.resize_delta_for_op (Meta.GrabOp.RESIZING_S) == 0);
     assert (Geometry.resize_delta_for_op (Meta.GrabOp.MOVING) == 0);
     assert (Geometry.resize_delta_for_op (Meta.GrabOp.NONE) == 0);
+}
+
+void test_resize_delta_for_op_ignores_keyboard_resizes () {
+    // Keyboard-driven resizes are still resizes (is_resize_op() exempts
+    // them from retile()), but they never drive a divider partner — only
+    // an interactive mouse drag on a specific edge does.
+    assert (Geometry.resize_delta_for_op (Meta.GrabOp.KEYBOARD_RESIZING_E) == 0);
+    assert (Geometry.resize_delta_for_op (Meta.GrabOp.KEYBOARD_RESIZING_W) == 0);
+    assert (Geometry.resize_delta_for_op (Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN) == 0);
 }
 
 void test_is_resize_op_true_for_every_resize_variant () {
@@ -85,16 +116,24 @@ public static int main (string[] args) {
     Test.add_func ("/geometry/next_fraction_width/steps_up", test_next_fraction_width_steps_up);
     Test.add_func ("/geometry/next_fraction_width/picks_closest_when_between_steps",
         test_next_fraction_width_picks_closest_when_between_steps);
+    Test.add_func ("/geometry/next_fraction_width/breaks_exact_ties_toward_lower_fraction",
+        test_next_fraction_width_breaks_exact_ties_toward_lower_fraction);
     Test.add_func ("/geometry/cap_delta_to_min_width/passes_through_when_room",
         test_cap_delta_to_min_width_passes_through_when_room);
     Test.add_func ("/geometry/cap_delta_to_min_width/caps_when_it_would_go_below_floor",
         test_cap_delta_to_min_width_caps_when_it_would_go_below_floor);
+    Test.add_func ("/geometry/cap_delta_to_min_width/passes_through_at_exact_floor",
+        test_cap_delta_to_min_width_passes_through_at_exact_floor);
+    Test.add_func ("/geometry/cap_delta_to_min_width/passes_through_when_growing_neighbor",
+        test_cap_delta_to_min_width_passes_through_when_growing_neighbor);
     Test.add_func ("/geometry/resize_delta_for_op/maps_right_edges_to_positive_one",
         test_resize_delta_for_op_maps_right_edges_to_positive_one);
     Test.add_func ("/geometry/resize_delta_for_op/maps_left_edges_to_negative_one",
         test_resize_delta_for_op_maps_left_edges_to_negative_one);
     Test.add_func ("/geometry/resize_delta_for_op/ignores_non_horizontal_ops",
         test_resize_delta_for_op_ignores_non_horizontal_ops);
+    Test.add_func ("/geometry/resize_delta_for_op/ignores_keyboard_resizes",
+        test_resize_delta_for_op_ignores_keyboard_resizes);
     Test.add_func ("/geometry/is_resize_op/true_for_every_resize_variant",
         test_is_resize_op_true_for_every_resize_variant);
     Test.add_func ("/geometry/is_resize_op/false_for_moving_and_none",
