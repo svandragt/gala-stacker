@@ -4,6 +4,13 @@ namespace Gala.Plugins.Stacker {
         private GLib.Settings settings;
         private FocusRing focus_ring;
 
+        private Meta.WorkspaceManager? workspace_manager = null;
+        private ulong workspace_added_id = 0;
+        private ulong workspace_removed_id = 0;
+        private ulong grab_op_begin_id = 0;
+        private ulong grab_op_end_id = 0;
+        private ulong do_focus_window_id = 0;
+
         private GLib.List<Row> rows = new GLib.List<Row> ();
 
         // Tracks the window we're waiting to "settle" after a drop: the
@@ -41,18 +48,18 @@ namespace Gala.Plugins.Stacker {
             settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.stacker");
 
             var display = wm.get_display ();
-            var workspace_manager = display.get_workspace_manager ();
+            workspace_manager = display.get_workspace_manager ();
 
             foreach (unowned var workspace in workspace_manager.get_workspaces ()) {
                 track_workspace (workspace);
             }
-            workspace_manager.workspace_added.connect ((index) => {
+            workspace_added_id = workspace_manager.workspace_added.connect ((index) => {
                 var workspace = workspace_manager.get_workspace_by_index (index);
                 if (workspace != null) {
                     track_workspace (workspace);
                 }
             });
-            workspace_manager.workspace_removed.connect ((index) => {
+            workspace_removed_id = workspace_manager.workspace_removed.connect ((index) => {
                 untrack_removed_workspaces (workspace_manager);
             });
 
@@ -62,9 +69,9 @@ namespace Gala.Plugins.Stacker {
             display.add_keybinding ("focus-right", settings, Meta.KeyBindingFlags.NONE, on_focus_right);
             display.add_keybinding ("cycle-width", settings, Meta.KeyBindingFlags.NONE, on_cycle_width);
 
-            display.grab_op_begin.connect (on_grab_op_begin);
-            display.grab_op_end.connect (on_grab_op_end);
-            display.do_focus_window.connect (on_window_focused);
+            grab_op_begin_id = display.grab_op_begin.connect (on_grab_op_begin);
+            grab_op_end_id = display.grab_op_end.connect (on_grab_op_end);
+            do_focus_window_id = display.do_focus_window.connect (on_window_focused);
 
             focus_ring = new FocusRing (wm);
         }
@@ -179,31 +186,22 @@ namespace Gala.Plugins.Stacker {
                 return;
             }
 
+            if (Geometry.is_resize_op (op)) {
+                // See Row.resize_window: exempts the window itself from
+                // retile() for the whole grab, independent of whether
+                // begin_divider_resize() below finds a neighbor to mirror
+                // the drag into (e.g. a vertical-only or corner resize with
+                // no usable partner on that side still needs this, or the
+                // window's own live height change mid-drag would trigger a
+                // stray retile that snaps it back into its row slot).
+                Row.resize_window = window;
+            }
+
             begin_divider_resize (window, op);
         }
 
-        // Horizontal edge-resize ops map to which row-neighbor (if any)
-        // should mirror the drag: dragging the right edge (E) moves the
-        // shared boundary with the neighbor to the right, dragging the
-        // left edge (W) moves the boundary with the neighbor to the left.
-        // Vertical-only resizes (N/S) don't touch a row boundary at all.
-        private int resize_delta_for_op (Meta.GrabOp op) {
-            switch (op) {
-                case Meta.GrabOp.RESIZING_E:
-                case Meta.GrabOp.RESIZING_NE:
-                case Meta.GrabOp.RESIZING_SE:
-                    return 1;
-                case Meta.GrabOp.RESIZING_W:
-                case Meta.GrabOp.RESIZING_NW:
-                case Meta.GrabOp.RESIZING_SW:
-                    return -1;
-                default:
-                    return 0;
-            }
-        }
-
         private void begin_divider_resize (Meta.Window window, Meta.GrabOp op) {
-            int delta = resize_delta_for_op (op);
+            int delta = Geometry.resize_delta_for_op (op);
             if (delta == 0) {
                 return;
             }
@@ -214,7 +212,17 @@ namespace Gala.Plugins.Stacker {
             }
 
             unowned var partner = row.neighbor (window, delta);
-            if (partner == null) {
+            // Mirrors cycle_width()'s right_usable/left_usable checks: a
+            // maximized neighbor is still kept in Row.order (retile() just
+            // skips repositioning it), so row.neighbor() can hand back one
+            // here. Driving move_resize_frame() on it directly would fight
+            // Meta's own maximize state instead of the live drag mirroring
+            // cleanly like it does for an ordinary tiled neighbor. Guarding
+            // on minimized too even though a minimized window shouldn't be
+            // in order at all (see track_minimized_state()) — cheap and
+            // consistent with cycle_width()'s own belt-and-suspenders check.
+            if (partner == null || partner.minimized ||
+                partner.maximized_horizontally || partner.maximized_vertically) {
                 return;
             }
 
@@ -302,8 +310,24 @@ namespace Gala.Plugins.Stacker {
                 end_divider_resize ();
             }
 
+            // See Row.resize_window: clear the exemption now that the grab
+            // is over, and force one more retile so the window snaps fully
+            // into its row slot — needed even when there was no divider
+            // partner at all (e.g. a vertical-only or corner resize that
+            // begin_divider_resize() found no neighbor for).
+            if (Row.resize_window != null && Row.resize_window == window) {
+                unowned var resized = Row.resize_window;
+                Row.resize_window = null;
+
+                unowned var row = find_owning_row (resized);
+                if (row != null) {
+                    row.retile ();
+                }
+            }
+
             if (window == null) {
                 Row.grabbed_window = null;
+                Row.resize_window = null;
                 return;
             }
 
@@ -483,6 +507,14 @@ namespace Gala.Plugins.Stacker {
             }
         }
 
+        // Disconnects every signal this plugin connected on Meta.Display/
+        // Meta.WorkspaceManager and shuts down every remaining Row, not just
+        // already-empty ones (see Row.teardown()). At session logout every
+        // workspace still has windows on it, so untrack_removed_workspaces()
+        // alone never reaches them — leaving their hooks connected let this
+        // plugin's callbacks fire mid meta_display_close, reaching into
+        // windows/workspaces Mutter was already tearing down (root cause of
+        // the gala segfault-on-logout this fixed).
         public override void destroy () {
             var display = wm.get_display ();
             display.remove_keybinding ("reorder-left");
@@ -490,6 +522,45 @@ namespace Gala.Plugins.Stacker {
             display.remove_keybinding ("focus-left");
             display.remove_keybinding ("focus-right");
             display.remove_keybinding ("cycle-width");
+
+            if (resize_window != null) {
+                end_divider_resize ();
+            }
+
+            if (grab_op_begin_id != 0) {
+                display.disconnect (grab_op_begin_id);
+                grab_op_begin_id = 0;
+            }
+            if (grab_op_end_id != 0) {
+                display.disconnect (grab_op_end_id);
+                grab_op_end_id = 0;
+            }
+            if (do_focus_window_id != 0) {
+                display.disconnect (do_focus_window_id);
+                do_focus_window_id = 0;
+            }
+
+            if (workspace_manager != null) {
+                if (workspace_added_id != 0) {
+                    workspace_manager.disconnect (workspace_added_id);
+                    workspace_added_id = 0;
+                }
+                if (workspace_removed_id != 0) {
+                    workspace_manager.disconnect (workspace_removed_id);
+                    workspace_removed_id = 0;
+                }
+            }
+
+            if (settle_timeout_id != 0) {
+                GLib.Source.remove (settle_timeout_id);
+                settle_timeout_id = 0;
+            }
+
+            foreach (unowned var row in rows) {
+                row.teardown ();
+            }
+            rows = new GLib.List<Row> ();
+
             focus_ring.destroy ();
         }
     }

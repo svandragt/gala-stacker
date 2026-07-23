@@ -59,6 +59,9 @@ namespace Gala.Plugins.Stacker {
         private Gala.WindowManager wm;
         private FocusRingContent ring;
 
+        private ulong accent_color_id = 0;
+        private ulong do_focus_window_id = 0;
+
         private unowned Meta.Window? tracked = null;
         private ulong position_signal = 0;
         private ulong size_signal = 0;
@@ -85,12 +88,12 @@ namespace Gala.Plugins.Stacker {
             // — no polling or gsettings-key wiring of our own.
             var granite_settings = Granite.Settings.get_default ();
             ring.set_color (granite_settings.accent_color);
-            granite_settings.notify["accent-color"].connect (() => {
+            accent_color_id = granite_settings.notify["accent-color"].connect (() => {
                 ring.set_color (granite_settings.accent_color);
             });
 
             var display = wm.get_display ();
-            display.do_focus_window.connect (on_focus_window);
+            do_focus_window_id = display.do_focus_window.connect (on_focus_window);
 
             // Deliberately not calling track() eagerly here with whatever
             // window already has focus: `ring` was just add_child()'d this
@@ -155,6 +158,16 @@ namespace Gala.Plugins.Stacker {
                 tracked.disconnect (position_signal);
                 tracked.disconnect (size_signal);
                 tracked.disconnect (unmanaged_signal);
+            }
+
+            if (do_focus_window_id != 0) {
+                wm.get_display ().disconnect (do_focus_window_id);
+                do_focus_window_id = 0;
+            }
+
+            if (accent_color_id != 0) {
+                Granite.Settings.get_default ().disconnect (accent_color_id);
+                accent_color_id = 0;
             }
 
             ring.destroy ();

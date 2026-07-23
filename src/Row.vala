@@ -34,6 +34,16 @@ namespace Gala.Plugins.Stacker {
         // driving its frame directly to keep it glued to the dragged edge.
         public static unowned Meta.Window? resize_partner = null;
 
+        // Set by Main while the window itself (not its neighbor — see
+        // resize_partner above) is under an active interactive resize grab,
+        // including vertical-only (N/S) and diagonal resizes that have no
+        // row-neighbor to mirror into at all. Without this, a stray retile
+        // mid-drag — e.g. correct_height_mismatch() reacting to the
+        // window's own live height change during a corner-drag — would
+        // snap the window back into its row slot and fight the user's own
+        // resize, the same problem grabbed_window solves for a live move.
+        public static unowned Meta.Window? resize_window = null;
+
         // Static across every Row: every window currently claimed by any
         // row, by identity. Once a window is claimed, its row membership
         // is authoritative and is NOT re-derived from live get_monitor()
@@ -82,6 +92,16 @@ namespace Gala.Plugins.Stacker {
         private GLib.List<weak Meta.Window> lifecycle_tracked = new GLib.List<weak Meta.Window> ();
         private bool retile_queued = false;
         private bool retiling = false;
+        // Set by teardown() during full plugin shutdown (Main.destroy()) so
+        // every entry point that touches a Meta.Window/Workspace or
+        // schedules more work becomes a no-op. Needed because at shutdown
+        // every workspace still has windows on it, so this row's
+        // window_added/removed and per-window (unmanaged/size_changed/
+        // notify) hooks stay connected — Mutter's own teardown
+        // (meta_display_close) fires them mid-dispose, and without this
+        // guard those handlers would call back into windows/workspaces
+        // Mutter is actively destroying.
+        private bool shutting_down = false;
 
         private ulong window_added_id = 0;
         private ulong window_removed_id = 0;
@@ -152,13 +172,23 @@ namespace Gala.Plugins.Stacker {
             return order.length () == 0;
         }
 
-        // Called by Main when this row's workspace has been destroyed by
-        // Mutter (workspace_removed). Rows are otherwise never torn down —
-        // without this, `workspace` (an owned, not weak, property) keeps a
-        // dead workspace alive forever, and `rows`/`claimed` grow without
-        // bound as dynamic workspaces come and go. Only meant to be called
-        // on an empty row; see is_empty().
+        // Called by Main either when this row's workspace has been destroyed
+        // by Mutter (workspace_removed, only for an empty row — see
+        // is_empty()) or unconditionally on every remaining row during
+        // plugin shutdown (Main.destroy()). Disconnects this row's own
+        // workspace-level signals and marks it shutting_down so every other
+        // entry point (add_window, retile, etc.) becomes a no-op instead of
+        // reaching into windows/workspaces Mutter may already be tearing
+        // down. Without the workspace_removed case, `workspace` (an owned,
+        // not weak, property) would keep a dead workspace alive forever, and
+        // `rows`/`claimed` would grow without bound as dynamic workspaces
+        // come and go.
         public void teardown () {
+            if (shutting_down) {
+                return;
+            }
+            shutting_down = true;
+
             if (window_added_id != 0) {
                 workspace.disconnect (window_added_id);
                 window_added_id = 0;
@@ -312,6 +342,10 @@ namespace Gala.Plugins.Stacker {
         }
 
         public void add_window (Meta.Window window) {
+            if (shutting_down) {
+                return;
+            }
+
             if (window == grabbed_window) {
                 grabbed_window_churn (window);
                 return;
@@ -347,6 +381,10 @@ namespace Gala.Plugins.Stacker {
         // has proven unreliable for a tick or two. Skips add_window()'s own
         // (redundant, and in that case wrong) monitor re-check.
         public void force_add_window (Meta.Window window) {
+            if (shutting_down) {
+                return;
+            }
+
             track_minimized_state (window);
 
             if (!is_tileable (window) || contains (window)) {
@@ -357,6 +395,10 @@ namespace Gala.Plugins.Stacker {
         }
 
         private void append (Meta.Window window) {
+            if (shutting_down) {
+                return;
+            }
+
             // New windows land right after whichever window was last
             // focused in this row, not always at the tail — that's "to the
             // right of the window I was working with", which for a
@@ -397,6 +439,19 @@ namespace Gala.Plugins.Stacker {
                 // place this list should be pruned.
                 window.unmanaged.connect (() => {
                     lifecycle_tracked.remove (window);
+                    // Same reasoning as lifecycle_tracked above: these lists
+                    // exist only to guard against reconnecting the same
+                    // one-time hook, not to reflect current row membership,
+                    // so they must only ever be pruned here — when the
+                    // window is actually gone for good — never in
+                    // force_remove_window() (a plain minimize also calls
+                    // that). Pruning them there used to make a minimized-
+                    // then-re-evaluated window look "never tracked" to
+                    // track_minimized_state()/track_size_state(), which
+                    // reconnected a second handler on top of the still-live
+                    // original one every such cycle.
+                    minimize_tracked.remove (window);
+                    size_tracked.remove (window);
                     force_remove_window (window);
                 });
                 window.size_changed.connect (() => correct_height_mismatch (window));
@@ -455,7 +510,7 @@ namespace Gala.Plugins.Stacker {
         // queue_retile() is cheap here since retile() no-ops a
         // move_resize_frame for any window already in place.
         private void correct_height_mismatch (Meta.Window window) {
-            if (!contains (window)) {
+            if (shutting_down || !contains (window)) {
                 return;
             }
 
@@ -469,6 +524,10 @@ namespace Gala.Plugins.Stacker {
         }
 
         public void remove_window (Meta.Window window) {
+            if (shutting_down) {
+                return;
+            }
+
             if (window == grabbed_window) {
                 grabbed_window_churn (window);
                 return;
@@ -483,14 +542,12 @@ namespace Gala.Plugins.Stacker {
         // ignores the grabbed window so Mutter's spurious mid-drag
         // workspace signals don't touch it.
         public void force_remove_window (Meta.Window window) {
-            if (!contains (window)) {
+            if (shutting_down || !contains (window)) {
                 return;
             }
 
             order.remove (window);
             claimed.remove (window);
-            minimize_tracked.remove (window);
-            size_tracked.remove (window);
             if (window == last_focused) {
                 last_focused = null;
             }
@@ -557,18 +614,7 @@ namespace Gala.Plugins.Stacker {
             var area = workspace.get_work_area_for_monitor (monitor);
             var frame = window.get_frame_rect ();
 
-            int closest = 0;
-            double best_diff = double.MAX;
-            for (int i = 0; i < fractions.length; i++) {
-                double diff = Math.fabs (frame.width - area.width * fractions[i]);
-                if (diff < best_diff) {
-                    best_diff = diff;
-                    closest = i;
-                }
-            }
-
-            int next = (closest + 1) % fractions.length;
-            int new_width = (int) Math.round (area.width * fractions[next]);
+            int new_width = Geometry.next_fraction_width (frame.width, area.width, fractions);
             int delta = new_width - frame.width;
 
             // Mirror the resize into a neighbor the same way divider-drag
@@ -598,10 +644,7 @@ namespace Gala.Plugins.Stacker {
                 // the same floor divider-drag enforces, shrink it only down
                 // to that floor and grow this window by that reduced amount
                 // instead — otherwise the two would overlap.
-                int actual_delta = delta;
-                if (right_frame.width - actual_delta < MIN_NEIGHBOR_WIDTH) {
-                    actual_delta = right_frame.width - MIN_NEIGHBOR_WIDTH;
-                }
+                int actual_delta = Geometry.cap_delta_to_min_width (right_frame.width, delta, MIN_NEIGHBOR_WIDTH);
 
                 if (actual_delta != 0) {
                     window.move_resize_frame (false, frame.x, frame.y, frame.width + actual_delta, frame.height);
@@ -611,10 +654,7 @@ namespace Gala.Plugins.Stacker {
             } else if (delta != 0 && left_usable) {
                 var left_frame = left.get_frame_rect ();
 
-                int actual_delta = delta;
-                if (left_frame.width - actual_delta < MIN_NEIGHBOR_WIDTH) {
-                    actual_delta = left_frame.width - MIN_NEIGHBOR_WIDTH;
-                }
+                int actual_delta = Geometry.cap_delta_to_min_width (left_frame.width, delta, MIN_NEIGHBOR_WIDTH);
 
                 if (actual_delta != 0) {
                     window.move_resize_frame (false, frame.x - actual_delta, frame.y,
@@ -652,7 +692,7 @@ namespace Gala.Plugins.Stacker {
         // returned, recursing until the stack overflowed. Deferring to idle
         // lets the window finish construction first.
         private void queue_retile () {
-            if (retile_queued) {
+            if (shutting_down || retile_queued) {
                 return;
             }
 
@@ -666,8 +706,12 @@ namespace Gala.Plugins.Stacker {
 
         public void retile () {
             // Belt-and-suspenders: move_resize_frame() can itself trigger
-            // signals that lead back here before this call returns.
-            if (retiling || order.length () == 0) {
+            // signals that lead back here before this call returns. Also
+            // covers a retile already queued via GLib.Idle.add() before
+            // shutting_down flipped true — it still runs once queued, this
+            // just makes it a no-op instead of touching a window mid-Mutter-
+            // teardown.
+            if (shutting_down || retiling || order.length () == 0) {
                 return;
             }
 
@@ -713,13 +757,15 @@ namespace Gala.Plugins.Stacker {
                 // rest of the row, and forcing it back into its slot here
                 // would just fight Meta's own maximize. It snaps back into
                 // place on unmaximize instead (see append()'s notify hooks).
-                if (!window.minimized && window != grabbed_window && window != resize_partner && !is_maximized) {
+                if (!window.minimized && window != grabbed_window && window != resize_partner &&
+                    window != resize_window && !is_maximized) {
                     window.move_resize_frame (false, target_x, area.y, frame.width, area.height);
                 }
 
-                warning ("stacker: Row#%d retile monitor=%d title=%s seq=%u x=%d target_x=%d width=%d minimized=%s grabbed=%s maximized=%s",
+                warning ("stacker: Row#%d retile monitor=%d title=%s seq=%u x=%d target_x=%d width=%d minimized=%s grabbed=%s resizing=%s maximized=%s",
                     id, monitor, window.get_title (), window.get_stable_sequence (), x, target_x, frame.width,
-                    window.minimized.to_string (), (window == grabbed_window).to_string (), is_maximized.to_string ());
+                    window.minimized.to_string (), (window == grabbed_window).to_string (),
+                    (window == resize_window).to_string (), is_maximized.to_string ());
 
                 x += frame.width;
             });
