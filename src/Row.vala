@@ -543,6 +543,16 @@ namespace Gala.Plugins.Stacker {
                 return;
             }
 
+            // A maximized window's frame rect is the full monitor, not a
+            // meaningful starting point for the fraction cycle, and retile()
+            // leaves maximized windows alone anyway (see append()'s
+            // maximized notify hooks). Unmaximizing snaps it back into its
+            // row slot via that same hook instead of cycling its width here.
+            if (window.maximized_horizontally || window.maximized_vertically) {
+                window.unmaximize (Meta.MaximizeFlags.BOTH);
+                return;
+            }
+
             double[] fractions = { 1.0 / 3.0, 1.0 / 2.0, 2.0 / 3.0 };
             var area = workspace.get_work_area_for_monitor (monitor);
             var frame = window.get_frame_rect ();
