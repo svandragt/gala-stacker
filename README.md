@@ -1,4 +1,4 @@
-# gala-stacker
+# gala-xy
 
 I wanted [PaperWM](https://github.com/paperwm/PaperWM)-style tiling on
 elementaryOS, so this is a horizontal tiling plugin for
@@ -50,7 +50,7 @@ and `io.elementary.desktop.wm.keybindings` before picking something else.
 Rebind these in a terminal with `gsettings`, e.g.:
 
 ```
-gsettings set org.pantheon.desktop.gala.plugins.stacker focus-left "['<Super>comma']"
+gsettings set org.pantheon.desktop.gala.plugins.xy focus-left "['<Super>comma']"
 ```
 
 ...or through **System Settings → Tiling** — a `switchboard-plug` package
@@ -69,8 +69,8 @@ if the app has more than one window and only some of them should be excluded —
 System Settings → Tiling, or with `gsettings`:
 
 ```
-gsettings set org.pantheon.desktop.gala.plugins.stacker excluded-title-keywords "['wingpanel', 'plank', 'some-substring']"
-gsettings set org.pantheon.desktop.gala.plugins.stacker excluded-app-ids "['com.vandragt.sidewing', 'some.other.app']"
+gsettings set org.pantheon.desktop.gala.plugins.xy excluded-title-keywords "['wingpanel', 'plank', 'some-substring']"
+gsettings set org.pantheon.desktop.gala.plugins.xy excluded-app-ids "['com.vandragt.sidewing', 'some.other.app']"
 ```
 
 Small popups and confirmation dialogs (auth prompts, save-changes dialogs) are also left
@@ -78,7 +78,7 @@ alone rather than tiled, based on a minimum width/height in pixels (default 150,
 `min-tileable-size`):
 
 ```
-gsettings set org.pantheon.desktop.gala.plugins.stacker min-tileable-size 200
+gsettings set org.pantheon.desktop.gala.plugins.xy min-tileable-size 200
 ```
 
 ## Mouse

@@ -1,4 +1,4 @@
-namespace Gala.Plugins.Stacker {
+namespace Gala.Plugins.Xy {
     /*
      * Keeps one workspace's normal windows tiled edge-to-edge in a single
      * horizontal row, each window full height. Order is whatever the user
@@ -137,7 +137,7 @@ namespace Gala.Plugins.Stacker {
             min_tileable_size_changed_id = get_exclusion_settings ()
                 .changed["min-tileable-size"].connect (() => reevaluate_exclusions ());
 
-            warning ("stacker: Row#%d construct monitor=%d workspace_index=%d", id, monitor, workspace.index ());
+            warning ("xy: Row#%d construct monitor=%d workspace_index=%d", id, monitor, workspace.index ());
 
             foreach (unowned var window in workspace.list_windows ()) {
                 add_window (window);
@@ -231,7 +231,7 @@ namespace Gala.Plugins.Stacker {
 
         private static GLib.Settings get_exclusion_settings () {
             if (exclusion_settings == null) {
-                exclusion_settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.stacker");
+                exclusion_settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.xy");
             }
 
             return exclusion_settings;
@@ -254,7 +254,7 @@ namespace Gala.Plugins.Stacker {
         // excluded-app-ids) rather than being hardcoded, so excluding a
         // different panel/dock/plugin doesn't need a source change and
         // rebuild — see `gsettings set
-        // org.pantheon.desktop.gala.plugins.stacker excluded-app-ids
+        // org.pantheon.desktop.gala.plugins.xy excluded-app-ids
         // "['some.app.id']"`.
         public static bool is_chrome_window (Meta.Window window) {
             var settings = get_exclusion_settings ();
@@ -363,7 +363,7 @@ namespace Gala.Plugins.Stacker {
             track_minimized_state (window);
             track_size_state (window);
 
-            warning ("stacker: Row#%d add_window check title=%s seq=%u row_monitor=%d window.get_monitor=%d tileable=%s workspace_index=%d",
+            warning ("xy: Row#%d add_window check title=%s seq=%u row_monitor=%d window.get_monitor=%d tileable=%s workspace_index=%d",
                 id, window.get_title (), window.get_stable_sequence (), monitor, window.get_monitor (),
                 is_tileable (window).to_string (), workspace.index ());
 
@@ -371,7 +371,7 @@ namespace Gala.Plugins.Stacker {
                 return;
             }
 
-            warning ("stacker: Row#%d add_window ACCEPTED title=%s seq=%u monitor=%d", id, window.get_title (), window.get_stable_sequence (), monitor);
+            warning ("xy: Row#%d add_window ACCEPTED title=%s seq=%u monitor=%d", id, window.get_title (), window.get_stable_sequence (), monitor);
             append (window);
         }
 
@@ -474,7 +474,7 @@ namespace Gala.Plugins.Stacker {
                     }
                 });
             }
-            warning ("stacker: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
+            warning ("xy: Row#%d append title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();
             schedule_new_window_settle_retiles ();
@@ -517,7 +517,7 @@ namespace Gala.Plugins.Stacker {
             var area = workspace.get_work_area_for_monitor (monitor);
             var frame = window.get_frame_rect ();
             if (frame.height != area.height) {
-                warning ("stacker: Row#%d height_mismatch title=%s seq=%u expected_height=%d actual_height=%d y=%d",
+                warning ("xy: Row#%d height_mismatch title=%s seq=%u expected_height=%d actual_height=%d y=%d",
                     id, window.get_title (), window.get_stable_sequence (), area.height, frame.height, frame.y);
                 queue_retile ();
             }
@@ -551,7 +551,7 @@ namespace Gala.Plugins.Stacker {
             if (window == last_focused) {
                 last_focused = null;
             }
-            warning ("stacker: Row#%d force_remove_window title=%s seq=%u monitor=%d new_order.length=%u",
+            warning ("xy: Row#%d force_remove_window title=%s seq=%u monitor=%d new_order.length=%u",
                 id, window.get_title (), window.get_stable_sequence (), monitor, order.length ());
             queue_retile ();
         }
@@ -719,7 +719,7 @@ namespace Gala.Plugins.Stacker {
 
             var area = workspace.get_work_area_for_monitor (monitor);
             int max_x = area.x + area.width;
-            warning ("stacker: Row#%d retile monitor=%d workspace_index=%d area=(%d,%d %dx%d) order.length=%u",
+            warning ("xy: Row#%d retile monitor=%d workspace_index=%d area=(%d,%d %dx%d) order.length=%u",
                 id, monitor, workspace.index (), area.x, area.y, area.width, area.height, order.length ());
 
             int x = area.x;
@@ -762,7 +762,7 @@ namespace Gala.Plugins.Stacker {
                     window.move_resize_frame (false, target_x, area.y, frame.width, area.height);
                 }
 
-                warning ("stacker: Row#%d retile monitor=%d title=%s seq=%u x=%d target_x=%d width=%d minimized=%s grabbed=%s resizing=%s maximized=%s",
+                warning ("xy: Row#%d retile monitor=%d title=%s seq=%u x=%d target_x=%d width=%d minimized=%s grabbed=%s resizing=%s maximized=%s",
                     id, monitor, window.get_title (), window.get_stable_sequence (), x, target_x, frame.width,
                     window.minimized.to_string (), (window == grabbed_window).to_string (),
                     (window == resize_window).to_string (), is_maximized.to_string ());

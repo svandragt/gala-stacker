@@ -1,4 +1,4 @@
-using Gala.Plugins.Stacker;
+using Gala.Plugins.Xy;
 
 void test_next_fraction_width_steps_up () {
     double[] fractions = { 1.0 / 3.0, 1.0 / 2.0, 2.0 / 3.0 };

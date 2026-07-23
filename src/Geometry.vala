@@ -1,4 +1,4 @@
-namespace Gala.Plugins.Stacker {
+namespace Gala.Plugins.Xy {
     // Pure width/delta math pulled out of Row.cycle_width() and
     // Main.begin_divider_resize() so it can be unit tested without a live
     // Mutter session (see tests/geometry-test.vala).

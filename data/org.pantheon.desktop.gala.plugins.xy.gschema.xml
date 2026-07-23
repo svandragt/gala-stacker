@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema path="/org/pantheon/desktop/gala/plugins/stacker/" id="org.pantheon.desktop.gala.plugins.stacker">
+  <schema path="/org/pantheon/desktop/gala/plugins/xy/" id="org.pantheon.desktop.gala.plugins.xy">
     <key type="as" name="reorder-left">
       <default><![CDATA[['<Super><Shift>bracketleft']]]></default>
       <summary>Move focused window left in the row</summary>

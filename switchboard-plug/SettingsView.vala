@@ -1,4 +1,4 @@
-namespace Stacker {
+namespace Xy {
     // A sidebar + stack, like every other multi-section Switchboard plug
     // (confirmed by inspecting io.elementary.settings.mouse-touchpad's
     // actual widget tree live: GtkPaned > [SettingsSidebar, GtkStack]) —
@@ -16,7 +16,7 @@ namespace Stacker {
     // like the real plug does, is the only option.
     public class SettingsView : GLib.Object {
         public Gtk.Widget build () {
-            var settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.stacker");
+            var settings = new GLib.Settings ("org.pantheon.desktop.gala.plugins.xy");
 
             var stack = new Gtk.Stack ();
             stack.add_titled (new ShortcutsPage (settings), "shortcuts", "Shortcuts");
@@ -352,7 +352,7 @@ namespace Stacker {
         }
     }
 
-    // Same keys Row.is_chrome_window() reads at runtime (see gala-stacker's
+    // Same keys Row.is_chrome_window() reads at runtime (see gala-xy's
     // gschema) — a window matching either list is treated as system chrome
     // and never tiled.
     private class ExclusionsPage : BasePage {

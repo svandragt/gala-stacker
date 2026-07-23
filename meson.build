@@ -1,4 +1,4 @@
-project('gala-stacker', 'vala', 'c', version: '0.1.0')
+project('gala-xy', 'vala', 'c', version: '0.1.0')
 
 gnome = import('gnome')
 
@@ -27,11 +27,11 @@ add_project_arguments([
 ], language: 'vala')
 
 install_data(
-    'data/org.pantheon.desktop.gala.plugins.stacker.gschema.xml',
+    'data/org.pantheon.desktop.gala.plugins.xy.gschema.xml',
     install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
 )
 
-shared_library('gala-stacker',
+shared_library('gala-xy',
     files(
         'src/Main.vala',
         'src/Row.vala',
@@ -63,7 +63,7 @@ test('geometry', geometry_test_exe)
 switchboard_dep = dependency('switchboard-3')
 switchboard_plugs_dir = switchboard_dep.get_variable(pkgconfig: 'plugsdir')
 
-shared_module('stacker-settings',
+shared_module('xy-settings',
     files(
         'switchboard-plug/Plug.vala',
         'switchboard-plug/SettingsView.vala',

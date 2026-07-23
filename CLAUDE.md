@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`gala-stacker`: a [PaperWM](https://github.com/paperwm/PaperWM)-inspired horizontal tiling
+`gala-xy`: a [PaperWM](https://github.com/paperwm/PaperWM)-inspired horizontal tiling
 plugin for Gala (the window manager behind elementaryOS's Pantheon desktop), built against
 the public `libgala-dev` plugin API — not a Gala fork. Windows on a workspace are tiled
 edge-to-edge in a single horizontal row per monitor, full height, keeping their current
@@ -21,8 +21,8 @@ make lint       # io.elementary.vala-lint src/*.vala switchboard-plug/*.vala
 make format     # io.elementary.vala-lint -f ... (auto-fixes what it can)
 ```
 
-`meson.build` produces two shared objects from one project: `libgala-stacker.so` (the Gala
-plugin itself, `src/*.vala`) and `libstacker-settings.so` (a Switchboard settings plug,
+`meson.build` produces two shared objects from one project: `libgala-xy.so` (the Gala
+plugin itself, `src/*.vala`) and `libxy-settings.so` (a Switchboard settings plug,
 `switchboard-plug/*.vala`, installed to Switchboard's `personal` category) — see "Settings"
 below. Both need `make install` and a log out/in (or, for the Switchboard plug alone,
 just restarting Switchboard) to pick up.
@@ -45,12 +45,12 @@ dependency-only static unit; logging out lets it come back up cleanly on its own
 
 There is no automated test suite. This plugin is developed and debugged live against a
 real elementaryOS X11 session — verify changes by installing, reloading, reproducing the
-window-management behavior in question, and reading `journalctl _COMM=gala | grep stacker`
+window-management behavior in question, and reading `journalctl _COMM=gala | grep xy`
 for the plugin's `warning()` trace output.
 
 ## Architecture
 
-Three Vala files compiled into one `libgala-stacker.so`, registered via `register_plugin()`
+Three Vala files compiled into one `libgala-xy.so`, registered via `register_plugin()`
 at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` load priority).
 
 - **`Main.vala`** — top-level orchestration. Tracks one `Row` per (workspace, monitor) pair
@@ -143,10 +143,10 @@ never an inline lambda, or Vala's auto-inserted null assertion crashes Gala.
 
 ## Settings
 
-`switchboard-plug/` is a separate build target (`libstacker-settings.so`) from the Gala
-plugin — a Switchboard plug, not part of `libgala-stacker.so`, installed into Switchboard's
+`switchboard-plug/` is a separate build target (`libxy-settings.so`) from the Gala
+plugin — a Switchboard plug, not part of `libgala-xy.so`, installed into Switchboard's
 `personal` category. It has no logic of its own: it's a GTK4 view over the same
-`org.pantheon.desktop.gala.plugins.stacker` gschema the plugin itself reads, using
+`org.pantheon.desktop.gala.plugins.xy` gschema the plugin itself reads, using
 `GLib.Settings.bind_with_mapping()` to show/edit each `as` (string array) key as a single
 comma-separated `Gtk.Entry` — one binding function pair (`strv_to_text`/`text_to_strv` in
 `SettingsView.vala`) covers every row, keybindings and exclusion lists alike, since they're

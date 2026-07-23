@@ -2,7 +2,7 @@ BUILD_DIR := build
 PLUGIN_DIR := /usr/lib/x86_64-linux-gnu/gala/plugins
 SWITCHBOARD_PLUG_DIR := /usr/lib/x86_64-linux-gnu/switchboard-3/personal
 SCHEMA_DIR := /usr/share/glib-2.0/schemas
-SCHEMA := org.pantheon.desktop.gala.plugins.stacker.gschema.xml
+SCHEMA := org.pantheon.desktop.gala.plugins.xy.gschema.xml
 
 .PHONY: all setup build test install-hooks install uninstall clean lint format
 
@@ -24,8 +24,8 @@ install: build
 	sudo ninja -C $(BUILD_DIR) install
 
 uninstall:
-	sudo rm -f $(PLUGIN_DIR)/libgala-stacker.so
-	sudo rm -f $(SWITCHBOARD_PLUG_DIR)/libstacker-settings.so
+	sudo rm -f $(PLUGIN_DIR)/libgala-xy.so
+	sudo rm -f $(SWITCHBOARD_PLUG_DIR)/libxy-settings.so
 	sudo rm -f $(SCHEMA_DIR)/$(SCHEMA)
 	sudo glib-compile-schemas $(SCHEMA_DIR)
 

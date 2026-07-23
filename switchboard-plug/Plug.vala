@@ -1,18 +1,18 @@
-namespace Stacker {
-    // Switchboard entry point for gala-stacker's settings. Reads/writes the
+namespace Xy {
+    // Switchboard entry point for gala-xy's settings. Reads/writes the
     // same schema the plugin itself uses (org.pantheon.desktop.gala.plugins.
-    // stacker) — this is just a GUI over the same gsettings keys documented
+    // xy) — this is just a GUI over the same gsettings keys documented
     // in the plugin's README, nothing plugin-specific lives here.
     public class SettingsPlug : Switchboard.Plug {
         private Gtk.Widget? main_widget = null;
 
         public SettingsPlug () {
             var settings = new Gee.TreeMap<string, string?> ();
-            settings.set ("stacker", "Tiling");
+            settings.set ("xy", "Tiling");
 
             Object (
                 category: Switchboard.Plug.Category.PERSONAL,
-                code_name: "io.elementary.settings.stacker",
+                code_name: "io.elementary.settings.xy",
                 display_name: "Tiling",
                 description: "Horizontal window tiling shortcuts and exclusions",
                 icon: "preferences-desktop-workspaces",
@@ -43,6 +43,6 @@ namespace Stacker {
 }
 
 public Switchboard.Plug get_plug (GLib.Module module) {
-    debug ("Activating Stacker settings plug");
-    return new Stacker.SettingsPlug ();
+    debug ("Activating Xy settings plug");
+    return new Xy.SettingsPlug ();
 }
