@@ -110,6 +110,30 @@ void test_is_resize_op_false_for_moving_and_none () {
     assert (!Geometry.is_resize_op (Meta.GrabOp.NONE));
 }
 
+void test_is_dropped_near_bottom_edge_true_when_flush_with_area_bottom () {
+    // Area is (0, 0, 1000x900); a window ending exactly at y=900 is flush.
+    assert (Geometry.is_dropped_near_bottom_edge (800, 100, 0, 900, 10));
+}
+
+void test_is_dropped_near_bottom_edge_true_within_threshold () {
+    // Frame bottom at y=895, 5px short of the area's 900px bottom edge,
+    // still within a 10px threshold.
+    assert (Geometry.is_dropped_near_bottom_edge (795, 100, 0, 900, 10));
+}
+
+void test_is_dropped_near_bottom_edge_false_outside_threshold () {
+    // Frame bottom at y=850, 50px short of the bottom edge — well outside
+    // a 10px threshold, an ordinary drop elsewhere in the row.
+    assert (!Geometry.is_dropped_near_bottom_edge (750, 100, 0, 900, 10));
+}
+
+void test_is_dropped_near_bottom_edge_accounts_for_area_offset () {
+    // A non-zero area.y (e.g. a monitor below the primary one) shifts the
+    // bottom edge accordingly.
+    assert (Geometry.is_dropped_near_bottom_edge (1700, 100, 900, 900, 10));
+    assert (!Geometry.is_dropped_near_bottom_edge (1600, 100, 900, 900, 10));
+}
+
 public static int main (string[] args) {
     Test.init (ref args);
 
@@ -138,6 +162,14 @@ public static int main (string[] args) {
         test_is_resize_op_true_for_every_resize_variant);
     Test.add_func ("/geometry/is_resize_op/false_for_moving_and_none",
         test_is_resize_op_false_for_moving_and_none);
+    Test.add_func ("/geometry/is_dropped_near_bottom_edge/true_when_flush_with_area_bottom",
+        test_is_dropped_near_bottom_edge_true_when_flush_with_area_bottom);
+    Test.add_func ("/geometry/is_dropped_near_bottom_edge/true_within_threshold",
+        test_is_dropped_near_bottom_edge_true_within_threshold);
+    Test.add_func ("/geometry/is_dropped_near_bottom_edge/false_outside_threshold",
+        test_is_dropped_near_bottom_edge_false_outside_threshold);
+    Test.add_func ("/geometry/is_dropped_near_bottom_edge/accounts_for_area_offset",
+        test_is_dropped_near_bottom_edge_accounts_for_area_offset);
 
     return Test.run ();
 }

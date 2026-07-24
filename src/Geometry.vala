@@ -51,6 +51,19 @@ namespace Gala.Plugins.Xy {
             }
         }
 
+        // True when a window's dropped frame bottom edge lands within
+        // threshold px of its monitor work area's bottom edge — the
+        // trigger for toggling floating via drag (see Main's
+        // dropped_on_bottom_edge()). Proxies "dragged to the bottom edge"
+        // off the window's own resting frame rather than live pointer
+        // position, since a plain move drag doesn't change the window's
+        // size — if the user pushed it all the way down, the frame bottom
+        // ends up right at the work area's bottom edge.
+        public static bool is_dropped_near_bottom_edge (int frame_y, int frame_height, int area_y, int area_height,
+            int threshold) {
+            return frame_y + frame_height >= area_y + area_height - threshold;
+        }
+
         // True for any interactive resize grab, mouse or keyboard-driven,
         // including the vertical-only (N/S) and diagonal ops that
         // resize_delta_for_op() maps to no row-neighbor at all. Used to

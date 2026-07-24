@@ -54,8 +54,8 @@ Three Vala files compiled into one `libgala-xy.so`, registered via `register_plu
 at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` load priority).
 
 - **`Main.vala`** — top-level orchestration. Tracks one `Row` per (workspace, monitor) pair
-  via `track_workspace()`/`find_row()`, registers the five keybindings (reorder/focus
-  left/right, cycle-width), and owns the interactive-drag lifecycle: `grab_op_begin`/`grab_op_end` →
+  via `track_workspace()`/`find_row()`, registers the six keybindings (reorder/focus
+  left/right, cycle-width, toggle-floating), and owns the interactive-drag lifecycle: `grab_op_begin`/`grab_op_end` →
   `on_window_dropped()` re-homes the dropped window into the correct monitor's row using a
   self-computed monitor (see below), then an event-driven settle mechanism
   (`restart_settle_timer()` + `Row.grabbed_window_churn`) waits out post-drop workspace
@@ -69,7 +69,14 @@ at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` lo
   snapped-window divider), and `end_divider_resize()` disconnects that hook and forces one
   more `retile()` on grab end. While a divider resize is in flight the partner is exempt
   from `retile()` via `Row.resize_partner`, the same mechanism as `Row.grabbed_window` but
-  for "being driven directly by Main mid-resize" instead of "mid-move".
+  for "being driven directly by Main mid-resize" instead of "mid-move". `on_grab_op_end()`
+  also checks every plain-move drop against `dropped_on_bottom_edge()`
+  (`Geometry.is_dropped_near_bottom_edge()`, proxied off the dropped frame's resting
+  position rather than live pointer tracking) and, if the window landed within
+  `FLOAT_EDGE_THRESHOLD` px of its monitor's work-area bottom edge, toggles floating
+  instead of running the normal re-home path — see `Row.vala`'s floating notes below. The
+  `toggle-floating` keybinding (default Super+Escape — Super+F was already taken) drives
+  the same toggle from the keyboard, via `find_owning_row()` on the focused window.
 - **`Row.vala`** — one row = one monitor's tiled window order for one workspace. Holds
   `order` (a `GLib.List<weak Meta.Window>`), listens to `workspace.window_added`/
   `window_removed`, and lays windows out edge-to-edge left-to-right in `retile()`
@@ -113,7 +120,19 @@ at the bottom of `src/Main.vala` (`Gala.PluginFunction.ADDITION`, `IMMEDIATE` lo
   window is mid-drag, so Mutter's own churn during a live cross-monitor drag doesn't fight the
   user's pointer. `Row.resize_partner` (static, same shape) is `retile()`'s other exemption:
   whichever window `Main`'s divider-resize handling is currently driving directly, so an
-  unrelated retile mid-drag doesn't snap it back to its pre-resize width. `cycle_width()` steps the focused window's width through fixed fractions of
+  unrelated retile mid-drag doesn't snap it back to its pre-resize width. `Row.floating`
+  (static, same shape again) is the third `retile()` exemption, but unlike the other two it
+  isn't transient: a window stays in it — with no slot reserved and no repositioning at
+  all, as if it weren't in `order` — until something explicitly clears it via
+  `set_floating()`. That's toggled by dragging the window to its monitor's bottom edge (see
+  `Main.vala` above) or the `toggle-floating` keybinding, and also cleared as a side effect
+  of `cycle_width()` (Super+R) or maximizing (`on_maximized_changed()`'s hook on
+  `notify["maximized-horizontally"/"vertically"]`) — both read as "the user just did
+  something that implies they want this window back in the row". A floating window stays
+  in `Row.claimed`/`order` throughout, so keyboard reorder/focus-neighbor/cycle-width still
+  reach it and it's excluded from `cycle_width()`'s/`begin_divider_resize()`'s neighbor
+  usability checks the same way a minimized or maximized neighbor already was. `cycle_width()`
+  steps the focused window's width through fixed fractions of
   the monitor work area (1/3, 1/2, 2/3), re-deriving
   the closest current fraction from the window's live width each call rather than tracking
   cycle state on the window. `append()` inserts a newly tiled window right after

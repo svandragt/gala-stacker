@@ -44,6 +44,20 @@ namespace Gala.Plugins.Xy {
         // resize, the same problem grabbed_window solves for a live move.
         public static unowned Meta.Window? resize_window = null;
 
+        // Windows currently floating: excluded from this row's tiling
+        // entirely — retile() skips them with no slot reserved, so
+        // neighbors close the gap immediately — until explicitly unfloated
+        // (dragging to the bottom edge again, cycling width, or
+        // maximizing). Static like grabbed_window/claimed: floating is a
+        // property of the window, not of whichever Row currently owns it,
+        // so it survives the window being re-homed to a different row
+        // (e.g. dragged to another monitor while floating).
+        private static GLib.List<weak Meta.Window> floating = new GLib.List<weak Meta.Window> ();
+
+        public static bool is_floating (Meta.Window window) {
+            return floating.find (window) != null;
+        }
+
         // Static across every Row: every window currently claimed by any
         // row, by identity. Once a window is claimed, its row membership
         // is authoritative and is NOT re-derived from live get_monitor()
@@ -220,6 +234,25 @@ namespace Gala.Plugins.Xy {
         // currently is.
         public void note_focus (Meta.Window window) {
             last_focused = window;
+        }
+
+        // Toggled by Main, either from the toggle-floating keybinding or a
+        // drag dropped on the monitor's bottom edge. Forces a retile either
+        // way: turning floating on needs neighbors to immediately close the
+        // gap this window's slot leaves behind; turning it off needs the
+        // window snapped back into its slot.
+        public void set_floating (Meta.Window window, bool value) {
+            if (value == is_floating (window)) {
+                return;
+            }
+
+            if (value) {
+                floating.append (window);
+            } else {
+                floating.remove (window);
+            }
+
+            queue_retile ();
         }
 
         // Backing store for excluded-app-ids/excluded-title-keywords (see
@@ -452,6 +485,7 @@ namespace Gala.Plugins.Xy {
                     // original one every such cycle.
                     minimize_tracked.remove (window);
                     size_tracked.remove (window);
+                    floating.remove (window);
                     force_remove_window (window);
                 });
                 window.size_changed.connect (() => correct_height_mismatch (window));
@@ -459,9 +493,11 @@ namespace Gala.Plugins.Xy {
                 // the rest of the row — retile() deliberately leaves it alone
                 // while that's the case (see retile()). Once it's unmaximized
                 // again it needs to snap back into its row slot, which nothing
-                // else would trigger.
-                window.notify["maximized-horizontally"].connect (() => queue_retile ());
-                window.notify["maximized-vertically"].connect (() => queue_retile ());
+                // else would trigger. Maximizing also unfloats: "resized or
+                // maximized" both count as leaving the floating state, per
+                // set_floating()'s callers.
+                window.notify["maximized-horizontally"].connect (() => on_maximized_changed (window));
+                window.notify["maximized-vertically"].connect (() => on_maximized_changed (window));
                 // Some chrome (observed with sidewing) has no title yet at map
                 // time, so is_tileable()'s title-based check above passes and
                 // the window gets claimed. Once its real title lands, evict it
@@ -521,6 +557,14 @@ namespace Gala.Plugins.Xy {
                     id, window.get_title (), window.get_stable_sequence (), area.height, frame.height, frame.y);
                 queue_retile ();
             }
+        }
+
+        private void on_maximized_changed (Meta.Window window) {
+            if (is_floating (window) && (window.maximized_horizontally || window.maximized_vertically)) {
+                set_floating (window, false);
+            }
+
+            queue_retile ();
         }
 
         public void remove_window (Meta.Window window) {
@@ -600,6 +644,14 @@ namespace Gala.Plugins.Xy {
                 return;
             }
 
+            // Cycling width is one of the ways a floating window rejoins
+            // the row's tiling (see set_floating()'s callers) — the rest of
+            // this method then runs as normal, cycling from wherever the
+            // window's frame currently sits.
+            if (is_floating (window)) {
+                set_floating (window, false);
+            }
+
             // A maximized window's frame rect is the full monitor, not a
             // meaningful starting point for the fraction cycle, and retile()
             // leaves maximized windows alone anyway (see append()'s
@@ -631,9 +683,9 @@ namespace Gala.Plugins.Xy {
             // with nothing compensating at all.
             unowned var right = neighbor (window, 1);
             unowned var left = neighbor (window, -1);
-            bool right_usable = right != null && !right.minimized &&
+            bool right_usable = right != null && !right.minimized && !is_floating (right) &&
                 !right.maximized_horizontally && !right.maximized_vertically;
-            bool left_usable = left != null && !left.minimized &&
+            bool left_usable = left != null && !left.minimized && !is_floating (left) &&
                 !left.maximized_horizontally && !left.maximized_vertically;
 
             if (delta != 0 && right_usable) {
@@ -724,6 +776,15 @@ namespace Gala.Plugins.Xy {
 
             int x = area.x;
             order.foreach ((window) => {
+                // Floating windows keep their row membership (so keyboard
+                // reorder/focus/cycle-width still reach them) but are
+                // otherwise invisible to layout: no slot reserved, no
+                // repositioning, so neighbors tile edge-to-edge as if the
+                // window wasn't in the row at all.
+                if (is_floating (window)) {
+                    return;
+                }
+
                 var frame = window.get_frame_rect ();
 
                 // No scrolling viewport: a row wider than the monitor has

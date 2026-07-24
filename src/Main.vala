@@ -26,6 +26,11 @@ namespace Gala.Plugins.Xy {
         // drag into the neighbor so the shared edge moves like elementary's
         // own snapped-window divider, instead of opening a gap or overlap.
         private const int MIN_DIVIDER_RESIZE_WIDTH = 50;
+        // How close (px) a dropped window's frame bottom must land to its
+        // monitor work area's bottom edge to count as a deliberate
+        // drag-to-bottom-edge float toggle rather than an ordinary drop
+        // elsewhere in the row. See dropped_on_bottom_edge().
+        private const int FLOAT_EDGE_THRESHOLD = 12;
         private unowned Meta.Window? resize_window = null;
         private unowned Meta.Window? resize_partner = null;
         private int resize_delta = 0;
@@ -68,6 +73,7 @@ namespace Gala.Plugins.Xy {
             display.add_keybinding ("focus-left", settings, Meta.KeyBindingFlags.NONE, on_focus_left);
             display.add_keybinding ("focus-right", settings, Meta.KeyBindingFlags.NONE, on_focus_right);
             display.add_keybinding ("cycle-width", settings, Meta.KeyBindingFlags.NONE, on_cycle_width);
+            display.add_keybinding ("toggle-floating", settings, Meta.KeyBindingFlags.NONE, on_toggle_floating);
 
             grab_op_begin_id = display.grab_op_begin.connect (on_grab_op_begin);
             grab_op_end_id = display.grab_op_end.connect (on_grab_op_end);
@@ -221,7 +227,7 @@ namespace Gala.Plugins.Xy {
             // on minimized too even though a minimized window shouldn't be
             // in order at all (see track_minimized_state()) — cheap and
             // consistent with cycle_width()'s own belt-and-suspenders check.
-            if (partner == null || partner.minimized ||
+            if (partner == null || partner.minimized || Row.is_floating (partner) ||
                 partner.maximized_horizontally || partner.maximized_vertically) {
                 return;
             }
@@ -342,12 +348,56 @@ namespace Gala.Plugins.Xy {
             // same tick was fighting that and causing a visible flicker
             // right after drop; letting it settle first avoids the fight.
             GLib.Idle.add (() => {
+                if (dropped_on_bottom_edge (window)) {
+                    // A deliberate drag to the bottom edge toggles floating
+                    // instead of an ordinary re-home: no cross-row move, no
+                    // settle wait, just flip the flag and let Row.retile()
+                    // (queued by set_floating()) react.
+                    Row.grabbed_window = null;
+                    toggle_floating (window);
+                    return GLib.Source.REMOVE;
+                }
+
                 unowned var target = on_window_dropped (window);
                 settle_window = window;
                 settle_row = target;
                 restart_settle_timer ();
                 return GLib.Source.REMOVE;
             });
+        }
+
+        // Proxies "the user dragged this window to the bottom edge" off
+        // where the window's frame actually rests after the drop, rather
+        // than live pointer position — see Geometry.is_dropped_near_bottom_edge().
+        private bool dropped_on_bottom_edge (Meta.Window window) {
+            unowned var workspace = window.get_workspace ();
+            if (workspace == null) {
+                return false;
+            }
+
+            int monitor = monitor_for_window (window);
+            var area = workspace.get_work_area_for_monitor (monitor);
+            var frame = window.get_frame_rect ();
+
+            return Geometry.is_dropped_near_bottom_edge (
+                frame.y, frame.height, area.y, area.height, FLOAT_EDGE_THRESHOLD);
+        }
+
+        private void toggle_floating (Meta.Window window) {
+            unowned var row = find_owning_row (window);
+            if (row == null) {
+                return;
+            }
+
+            row.set_floating (window, !Row.is_floating (window));
+        }
+
+        private void on_toggle_floating (Meta.Display display, Meta.Window? window, Clutter.KeyEvent? event,
+            Meta.KeyBinding binding) {
+            unowned var focused = display.get_focus_window ();
+            if (focused != null) {
+                toggle_floating (focused);
+            }
         }
 
         // Row.grabbed_window deliberately stays set through on_window_dropped
@@ -522,6 +572,7 @@ namespace Gala.Plugins.Xy {
             display.remove_keybinding ("focus-left");
             display.remove_keybinding ("focus-right");
             display.remove_keybinding ("cycle-width");
+            display.remove_keybinding ("toggle-floating");
 
             if (resize_window != null) {
                 end_divider_resize ();
