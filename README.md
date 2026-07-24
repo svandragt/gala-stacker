@@ -32,6 +32,9 @@ switching (`Super+Left/Right` by default) is untouched. It's only the layout
   resizes in tandem instead of leaving a gap or an overlap. That one I added
   after noticing it's how elementary already handles two windows snapped
   left/right, and it felt wrong not to have it for tiled windows too.
+- A window can be floated out of the row entirely – it keeps whatever
+  position and size it has and is left alone by tiling until you unfloat it
+  again (repeat the same drag/shortcut, cycle its width, or maximise it).
 
 ## Keyboard shortcuts
 
@@ -40,6 +43,7 @@ switching (`Super+Left/Right` by default) is untouched. It's only the layout
 | `Super+[` / `Super+]` | Move keyboard focus to the window left/right in the row |
 | `Super+Shift+[` / `Super+Shift+]` | Move the focused window itself left/right in the row |
 | `Super+R` | Cycle the focused window's width between 33%, 50%, and 67% of the monitor, shrinking or growing its row-neighbour to compensate |
+| `Super+Escape` | Toggle floating for the focused window |
 
 Every `Super`+arrow-key combination is already claimed by Pantheon/GNOME
 defaults (workspace switching, move-to-monitor, move-to-workspace, tiling),
@@ -87,6 +91,9 @@ Drag a window and drop it between two others in the row to reorder it there.
 
 Drag the edge a window shares with its row-neighbour to resize both at once,
 the shared boundary moving like a divider.
+
+Drag a window to the bottom edge of its monitor to float it out of the row –
+drag it there again to unfloat it.
 
 ## Installing
 

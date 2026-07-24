@@ -126,6 +126,7 @@ namespace Xy {
             add_shortcut_row (grid, 2, "Move window left", "reorder-left");
             add_shortcut_row (grid, 3, "Move window right", "reorder-right");
             add_shortcut_row (grid, 4, "Cycle window width", "cycle-width");
+            add_shortcut_row (grid, 5, "Toggle floating", "toggle-floating");
 
             return grid;
         }
